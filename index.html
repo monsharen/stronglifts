@@ -54,6 +54,33 @@
   header h1 { font-size: 26px; font-weight: 900; }
   header h1 .bar { color: var(--volt); }
   header .tag { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+  .tabs { display: flex; gap: 16px; }
+  .tab {
+    background: none; border: none; cursor: pointer;
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 4px 0; border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--chalk); border-bottom-color: var(--volt); }
+
+  /* ---------- stats ---------- */
+  .tiles { display: flex; gap: 10px; margin-bottom: 10px; }
+  .tile {
+    flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 10px; text-align: center;
+  }
+  .tile .num { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; line-height: 1.1; }
+  .tile .lbl { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-top: 2px; }
+  .chart-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 12px;
+  }
+  .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .chart-head h3 { font-size: 20px; font-weight: 900; }
+  .chart-head .cur { font-weight: 700; font-size: 14px; color: var(--volt); }
+  .chart-head .cur .best { color: var(--dim); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .chart-card svg { display: block; width: 100%; height: auto; }
+  .chart-dates { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; margin-top: 4px; }
 
   /* ---------- home: next workout card ---------- */
   .next-card {
@@ -270,9 +297,10 @@ function recommend(ex) {
 
 /* ================= app state ================= */
 
-let view = "home";   // "home" | "session"
+let view = "home";   // "home" | "session" | "stats"
 let draft = store.load("sl.draft", null);
 if (draft) view = "session";
+else if (location.hash === "#stats") view = "stats";
 
 function newDraft() {
   const type = nextWorkoutType();
@@ -303,14 +331,26 @@ const WHY_LABEL = {
 };
 
 function render() {
-  app.innerHTML = view === "session" ? sessionHTML() : homeHTML();
+  app.innerHTML = view === "session" ? sessionHTML() : view === "stats" ? statsHTML() : homeHTML();
 }
 
 function headerHTML() {
+  const right = view === "session"
+    ? `<span class="tag">5×5 log</span>`
+    : `<nav class="tabs">
+        <button class="tab ${view === "home" ? "active" : ""}" onclick="switchView('home')">Log</button>
+        <button class="tab ${view === "stats" ? "active" : ""}" onclick="switchView('stats')">Stats</button>
+      </nav>`;
   return `<header>
     <h1>STRONG<span class="bar">LIFTS</span></h1>
-    <span class="tag">5×5 log</span>
+    ${right}
   </header>`;
+}
+
+function switchView(v) {
+  view = v;
+  render();
+  window.scrollTo(0, 0);
 }
 
 function homeHTML() {
@@ -402,6 +442,87 @@ function sessionHTML() {
       <button class="btn btn-ghost" onclick="cancelSession()">Discard session</button>
       <div class="note">Tap a circle once for all ${5} reps, tap again to count down. Progress is kept if you close the page.</div>
     </div>`;
+}
+
+/* ================= stats ================= */
+
+/* Per-exercise series oldest → newest: { weight, ok, date } */
+function exerciseSeries(ex) {
+  const out = [];
+  for (const s of sessions())
+    for (const e of s.entries)
+      if (e.ex === ex) out.push({ weight: e.weight, ok: isSuccess(e), date: s.startedAt });
+  return out;
+}
+
+function fmtVolume(kg) {
+  return kg >= 1000 ? (kg / 1000).toFixed(1).replace(/\.0$/, "") + " t" : kg + " kg";
+}
+
+function chartSVG(pts) {
+  const W = 320, H = 110, P = { l: 34, r: 12, t: 12, b: 8 };
+  const ws = pts.map(p => p.weight);
+  let min = Math.min(...ws), max = Math.max(...ws);
+  if (min === max) { min -= 2.5; max += 2.5; }
+  const pad = (max - min) * 0.1;
+  min -= pad; max += pad;
+  const x = i => pts.length === 1 ? W / 2 : P.l + (W - P.l - P.r) * (i / (pts.length - 1));
+  const y = w => P.t + (H - P.t - P.b) * (1 - (w - min) / (max - min));
+
+  const gridW = [Math.max(...ws), Math.min(...ws)];
+  const grid = gridW.map(w => `
+    <line x1="${P.l}" y1="${y(w)}" x2="${W - P.r}" y2="${y(w)}" stroke="#2b303a" stroke-dasharray="3 4" stroke-width="1"/>
+    <text x="${P.l - 6}" y="${y(w) + 3}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">${w}</text>`).join("");
+
+  const line = pts.length > 1
+    ? `<polyline points="${pts.map((p, i) => `${x(i)},${y(p.weight)}`).join(" ")}" fill="none" stroke="#d8ff3e" stroke-width="2" stroke-linejoin="round"/>`
+    : "";
+  const dots = pts.map((p, i) =>
+    `<circle cx="${x(i)}" cy="${y(p.weight)}" r="3.5" fill="${p.ok ? "#d8ff3e" : "#101216"}" stroke="${p.ok ? "#d8ff3e" : "#ff5a48"}" stroke-width="2"/>`).join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${line}${dots}</svg>`;
+}
+
+function statsHTML() {
+  const all = sessions();
+  if (!all.length) {
+    return `${headerHTML()}<div class="empty">No data yet. Log a session first.</div>`;
+  }
+  let vol = 0, reps = 0;
+  for (const s of all)
+    for (const e of s.entries)
+      for (const r of e.setReps) { reps += r; vol += r * e.weight; }
+
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${all.length}</div><div class="lbl">Sessions</div></div>
+    <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Volume</div></div>
+    <div class="tile"><div class="num">${reps}</div><div class="lbl">Reps</div></div>
+  </div>`;
+
+  const charts = Object.keys(EXERCISES).map(ex => {
+    const pts = exerciseSeries(ex);
+    if (!pts.length) return "";
+    const def = EXERCISES[ex];
+    const cur = pts[pts.length - 1].weight;
+    const best = Math.max(...pts.map(p => p.weight));
+    return `<div class="chart-card">
+      <div class="chart-head">
+        <h3>${def.name}</h3>
+        <span class="cur">${fmtKg(cur)}<span class="best">best ${fmtKg(best)}</span></span>
+      </div>
+      ${chartSVG(pts)}
+      <div class="chart-dates">
+        <span>${fmtDate(pts[0].date)}</span>
+        <span>${pts.length} session${pts.length === 1 ? "" : "s"}</span>
+        <span>${fmtDate(pts[pts.length - 1].date)}</span>
+      </div>
+    </div>`;
+  }).join("");
+
+  return `${headerHTML()}
+    ${tiles}
+    <div class="section-title"><span>Working weight over time</span></div>
+    ${charts}`;
 }
 
 /* ================= actions ================= */
