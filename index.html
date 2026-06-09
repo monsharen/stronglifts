@@ -412,7 +412,7 @@ function homeHTML() {
       <div class="kicker">Next up</div>
       <h2>Workout <span class="letter">${type}</span></h2>
       ${rows}
-      <a class="video-link" href="${VIDEOS[type]}" target="_blank" rel="noopener"><span class="play">▶</span>Watch workout ${type} video</a>
+      <a class="video-link" href="${VIDEOS[type]}" target="_blank" rel="noopener"><span class="play">▶</span>Watch workout instructions</a>
     </div>
     <button class="btn btn-volt" onclick="startSession()">Start workout ${type}</button>
     <div class="section-title"><span>History</span><span>${hist.length} session${hist.length === 1 ? "" : "s"}</span></div>
@@ -454,7 +454,7 @@ function sessionHTML() {
     <div class="sess-head">
       <div class="kicker">${fmtDate(draft.startedAt)}</div>
       <h2>Workout <span class="letter">${draft.type}</span></h2>
-      <a class="video-link" href="${VIDEOS[draft.type]}" target="_blank" rel="noopener"><span class="play">▶</span>Watch workout ${draft.type} video</a>
+      <a class="video-link" href="${VIDEOS[draft.type]}" target="_blank" rel="noopener"><span class="play">▶</span>Watch workout instructions</a>
     </div>
     ${cards}
     <div class="sess-actions">
