@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#101216">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>STRONGLIFTS LOG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #101216;
+    --panel: #181b21;
+    --panel-2: #1f232b;
+    --line: #2b303a;
+    --chalk: #e8e6df;
+    --dim: #8b8f99;
+    --volt: #d8ff3e;
+    --volt-ink: #161900;
+    --fail: #ff5a48;
+    --radius: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { height: 100%; }
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse 120% 60% at 50% -10%, #1c2027 0%, transparent 60%),
+      repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.012) 3px 4px);
+    color: var(--chalk);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 16px 16px 120px; }
+
+  h1, h2, h3, .display {
+    font-family: "Big Shoulders Display", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+  }
+
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 8px 0 18px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 20px;
+  }
+  header h1 { font-size: 26px; font-weight: 900; }
+  header h1 .bar { color: var(--volt); }
+  header .tag { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+
+  /* ---------- home: next workout card ---------- */
+  .next-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 18px 6px;
+    position: relative;
+    overflow: hidden;
+  }
+  .next-card::before {
+    content: attr(data-letter);
+    position: absolute; right: -14px; top: -38px;
+    font-family: "Big Shoulders Display", sans-serif;
+    font-weight: 900; font-size: 170px; line-height: 1;
+    color: rgba(216,255,62,.07);
+    pointer-events: none;
+  }
+  .next-card .kicker { color: var(--dim); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+  .next-card h2 { font-size: 44px; font-weight: 900; line-height: 1; margin: 4px 0 14px; }
+  .next-card h2 .letter { color: var(--volt); }
+  .preview-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 10px 0;
+    border-top: 1px dashed var(--line);
+  }
+  .preview-row .ex { font-family: "Big Shoulders Display", sans-serif; font-weight: 700; font-size: 19px; text-transform: uppercase; }
+  .preview-row .scheme { color: var(--dim); font-size: 12px; margin-left: 8px; }
+  .preview-row .kg { font-weight: 700; font-size: 15px; }
+  .preview-row .kg.deload { color: var(--fail); }
+  .preview-row .kg.up { color: var(--volt); }
+
+  .btn {
+    display: block; width: 100%;
+    font-family: "Big Shoulders Display", sans-serif;
+    font-weight: 900; font-size: 24px; text-transform: uppercase; letter-spacing: .04em;
+    padding: 16px;
+    border: none; border-radius: var(--radius);
+    cursor: pointer;
+    margin-top: 14px;
+  }
+  .btn-volt { background: var(--volt); color: var(--volt-ink); box-shadow: 0 6px 24px rgba(216,255,62,.15); }
+  .btn-volt:active { transform: translateY(1px); box-shadow: none; }
+  .btn-ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-size: 16px; font-weight: 700; padding: 12px; }
+
+  /* ---------- history ---------- */
+  .section-title {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin: 28px 0 10px;
+    color: var(--dim);
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+  }
+  .hist-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .hist-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .hist-head .when { color: var(--dim); font-size: 12px; }
+  .hist-head .badge {
+    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 15px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    padding: 2px 9px; border-radius: 5px;
+  }
+  .hist-head .badge .letter { color: var(--volt); }
+  .hist-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-top: 1px dashed var(--line); font-size: 13px; }
+  .hist-row .reps { color: var(--dim); font-size: 12px; }
+  .hist-row .ok { color: var(--volt); }
+  .hist-row .nok { color: var(--fail); }
+  .hist-del {
+    background: none; border: none; color: var(--dim); font-family: inherit;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+    padding: 6px 0 0; opacity: .6;
+  }
+  .empty { color: var(--dim); text-align: center; padding: 30px 0; font-size: 13px; }
+
+  /* ---------- session view ---------- */
+  .sess-head { margin-bottom: 18px; }
+  .sess-head .kicker { color: var(--dim); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+  .sess-head h2 { font-size: 40px; font-weight: 900; line-height: 1; }
+  .sess-head h2 .letter { color: var(--volt); }
+
+  .ex-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .ex-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .ex-top h3 { font-size: 24px; font-weight: 900; }
+  .ex-top .scheme { color: var(--dim); font-size: 12px; }
+  .hint { font-size: 11px; color: var(--dim); margin-top: -6px; margin-bottom: 10px; }
+  .hint.deload { color: var(--fail); }
+  .hint.up { color: var(--volt); }
+
+  .weight-ctl { display: flex; align-items: stretch; gap: 8px; margin-bottom: 14px; }
+  .weight-ctl button {
+    flex: 0 0 56px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 700;
+    cursor: pointer;
+  }
+  .weight-ctl button:active { background: var(--line); }
+  .weight-ctl .wfield { flex: 1; position: relative; }
+  .weight-ctl input {
+    width: 100%; height: 100%; min-height: 56px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 30px;
+    text-align: center;
+    padding-right: 30px;
+  }
+  .weight-ctl input:focus { outline: 1px solid var(--volt); border-color: var(--volt); }
+  .weight-ctl .unit {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--dim); font-size: 11px; pointer-events: none;
+  }
+
+  .sets { display: flex; gap: 8px; }
+  .set-btn {
+    flex: 1; aspect-ratio: 1; max-width: 76px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: transparent;
+    color: var(--dim);
+    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 22px;
+    cursor: pointer;
+    transition: background .1s, color .1s, border-color .1s;
+  }
+  .set-btn.done { background: var(--volt); border-color: var(--volt); color: var(--volt-ink); }
+  .set-btn.partial { background: transparent; border-color: var(--volt); color: var(--volt); }
+  .set-btn.zero { border-color: var(--fail); color: var(--fail); }
+  .sets.single .set-btn { flex: 0 0 76px; }
+
+  .sess-actions { margin-top: 22px; }
+  .note { color: var(--dim); font-size: 11px; text-align: center; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+"use strict";
+
+/* ================= StrongLifts 5x5 rules ================= */
+
+const EXERCISES = {
+  squat:    { name: "Squat",          sets: 5, reps: 5, inc: 2.5, start: 20 },
+  bench:    { name: "Bench Press",    sets: 5, reps: 5, inc: 2.5, start: 20 },
+  row:      { name: "Barbell Row",    sets: 5, reps: 5, inc: 2.5, start: 30 },
+  ohp:      { name: "Overhead Press", sets: 5, reps: 5, inc: 2.5, start: 20 },
+  deadlift: { name: "Deadlift",       sets: 1, reps: 5, inc: 5,   start: 40 },
+};
+const WORKOUTS = { A: ["squat", "bench", "row"], B: ["squat", "ohp", "deadlift"] };
+const MIN_WEIGHT = 20;        // empty bar
+const DELOAD_AFTER = 3;       // failed sessions at same weight
+const DELOAD_FACTOR = 0.9;
+
+const store = {
+  load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+    catch { return fallback; }
+  },
+  save(key, val) { localStorage.setItem(key, JSON.stringify(val)); },
+  drop(key) { localStorage.removeItem(key); },
+};
+
+const sessions = () => store.load("sl.sessions", []); // oldest first
+
+function nextWorkoutType() {
+  const hist = sessions();
+  if (!hist.length) return "A";
+  return hist[hist.length - 1].type === "A" ? "B" : "A";
+}
+
+function isSuccess(entry) {
+  const def = EXERCISES[entry.ex];
+  return entry.setReps.length === def.sets && entry.setReps.every(r => r === def.reps);
+}
+
+/* History of one exercise, oldest → newest */
+function exerciseHistory(ex) {
+  const out = [];
+  for (const s of sessions())
+    for (const e of s.entries)
+      if (e.ex === ex) out.push(e);
+  return out;
+}
+
+function roundToPlate(w) {
+  return Math.max(MIN_WEIGHT, Math.round(w / 2.5) * 2.5);
+}
+
+/* Returns { weight, why } per StrongLifts progression rules */
+function recommend(ex) {
+  const def = EXERCISES[ex];
+  const hist = exerciseHistory(ex);
+  if (!hist.length) return { weight: def.start, why: "start" };
+
+  const last = hist[hist.length - 1];
+  if (isSuccess(last)) return { weight: last.weight + def.inc, why: "up" };
+
+  let fails = 0;
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const e = hist[i];
+    if (e.weight === last.weight && !isSuccess(e)) fails++;
+    else break;
+  }
+  if (fails >= DELOAD_AFTER) return { weight: roundToPlate(last.weight * DELOAD_FACTOR), why: "deload" };
+  return { weight: last.weight, why: "repeat" };
+}
+
+/* ================= app state ================= */
+
+let view = "home";   // "home" | "session"
+let draft = store.load("sl.draft", null);
+if (draft) view = "session";
+
+function newDraft() {
+  const type = nextWorkoutType();
+  return {
+    type,
+    startedAt: new Date().toISOString(),
+    entries: WORKOUTS[type].map(ex => {
+      const rec = recommend(ex);
+      return { ex, weight: rec.weight, why: rec.why, setReps: Array(EXERCISES[ex].sets).fill(null) };
+    }),
+  };
+}
+
+function saveDraft() { store.save("sl.draft", draft); }
+
+/* ================= rendering ================= */
+
+const app = document.getElementById("app");
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtKg = w => (w % 1 === 0 ? w : w.toFixed(1)) + " kg";
+const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+
+const WHY_LABEL = {
+  start: "starting weight",
+  up: "+weight — last session completed",
+  repeat: "repeat — last session not completed",
+  deload: "deload 10% — failed 3× at this weight",
+};
+
+function render() {
+  app.innerHTML = view === "session" ? sessionHTML() : homeHTML();
+}
+
+function headerHTML() {
+  return `<header>
+    <h1>STRONG<span class="bar">LIFTS</span></h1>
+    <span class="tag">5×5 log</span>
+  </header>`;
+}
+
+function homeHTML() {
+  const type = nextWorkoutType();
+  const rows = WORKOUTS[type].map(ex => {
+    const def = EXERCISES[ex];
+    const rec = recommend(ex);
+    const cls = rec.why === "deload" ? "deload" : rec.why === "up" ? "up" : "";
+    return `<div class="preview-row">
+      <span class="ex">${def.name}<span class="scheme">${def.sets}×${def.reps}</span></span>
+      <span class="kg ${cls}">${fmtKg(rec.weight)}</span>
+    </div>`;
+  }).join("");
+
+  const hist = sessions().slice().reverse();
+  const histHTML = hist.length
+    ? hist.map((s, ri) => {
+        const idx = sessions().length - 1 - ri;
+        const rows = s.entries.map(e => {
+          const def = EXERCISES[e.ex];
+          const ok = isSuccess(e);
+          const reps = e.setReps.map(r => r === null ? "–" : r).join("/");
+          return `<div class="hist-row">
+            <span>${def.name} <span class="reps">@ ${fmtKg(e.weight)}</span></span>
+            <span class="reps">${reps} <span class="${ok ? "ok" : "nok"}">${ok ? "✓" : "✗"}</span></span>
+          </div>`;
+        }).join("");
+        return `<div class="hist-card">
+          <div class="hist-head">
+            <span class="badge">WORKOUT <span class="letter">${s.type}</span></span>
+            <span class="when">${fmtDate(s.startedAt)}</span>
+          </div>
+          ${rows}
+          <button class="hist-del" onclick="deleteSession(${idx})">delete</button>
+        </div>`;
+      }).join("")
+    : `<div class="empty">No sessions yet. Lift something heavy.</div>`;
+
+  return `${headerHTML()}
+    <div class="next-card" data-letter="${type}">
+      <div class="kicker">Next up</div>
+      <h2>Workout <span class="letter">${type}</span></h2>
+      ${rows}
+    </div>
+    <button class="btn btn-volt" onclick="startSession()">Start workout ${type}</button>
+    <div class="section-title"><span>History</span><span>${hist.length} session${hist.length === 1 ? "" : "s"}</span></div>
+    ${histHTML}`;
+}
+
+function sessionHTML() {
+  const cards = draft.entries.map((e, i) => {
+    const def = EXERCISES[e.ex];
+    const sets = e.setReps.map((r, si) => {
+      let cls = "", label = "–";
+      if (r !== null) {
+        label = r;
+        cls = r === def.reps ? "done" : r === 0 ? "zero" : "partial";
+      }
+      return `<button class="set-btn ${cls}" onclick="tapSet(${i},${si})">${label}</button>`;
+    }).join("");
+    const hintCls = e.why === "deload" ? "deload" : e.why === "up" ? "up" : "";
+    return `<div class="ex-card">
+      <div class="ex-top">
+        <h3>${def.name}</h3>
+        <span class="scheme">${def.sets}×${def.reps}</span>
+      </div>
+      <div class="hint ${hintCls}">${WHY_LABEL[e.why]}</div>
+      <div class="weight-ctl">
+        <button onclick="bumpWeight(${i},-2.5)" aria-label="decrease">−</button>
+        <div class="wfield">
+          <input type="number" inputmode="decimal" step="2.5" min="0" value="${e.weight}"
+                 onchange="setWeight(${i}, this.value)">
+          <span class="unit">KG</span>
+        </div>
+        <button onclick="bumpWeight(${i},2.5)" aria-label="increase">+</button>
+      </div>
+      <div class="sets ${def.sets === 1 ? "single" : ""}">${sets}</div>
+    </div>`;
+  }).join("");
+
+  return `${headerHTML()}
+    <div class="sess-head">
+      <div class="kicker">${fmtDate(draft.startedAt)}</div>
+      <h2>Workout <span class="letter">${draft.type}</span></h2>
+    </div>
+    ${cards}
+    <div class="sess-actions">
+      <button class="btn btn-volt" onclick="finishSession()">Finish &amp; save</button>
+      <button class="btn btn-ghost" onclick="cancelSession()">Discard session</button>
+      <div class="note">Tap a circle once for all ${5} reps, tap again to count down. Progress is kept if you close the page.</div>
+    </div>`;
+}
+
+/* ================= actions ================= */
+
+function startSession() {
+  draft = newDraft();
+  saveDraft();
+  view = "session";
+  render();
+  window.scrollTo(0, 0);
+}
+
+function tapSet(ei, si) {
+  const e = draft.entries[ei];
+  const target = EXERCISES[e.ex].reps;
+  const cur = e.setReps[si];
+  e.setReps[si] = cur === null ? target : cur === 0 ? null : cur - 1;
+  saveDraft();
+  render();
+}
+
+function bumpWeight(ei, delta) {
+  const e = draft.entries[ei];
+  e.weight = Math.max(0, Math.round((e.weight + delta) * 10) / 10);
+  saveDraft();
+  render();
+}
+
+function setWeight(ei, val) {
+  const w = parseFloat(val);
+  draft.entries[ei].weight = isNaN(w) || w < 0 ? 0 : Math.round(w * 10) / 10;
+  saveDraft();
+  render();
+}
+
+function finishSession() {
+  const untouched = draft.entries.every(e => e.setReps.every(r => r === null));
+  if (untouched && !confirm("No sets logged. Save anyway?")) return;
+  const all = sessions();
+  // Unlogged sets count as 0 reps (not done)
+  draft.entries.forEach(e => { e.setReps = e.setReps.map(r => r === null ? 0 : r); });
+  draft.finishedAt = new Date().toISOString();
+  all.push(draft);
+  store.save("sl.sessions", all);
+  store.drop("sl.draft");
+  draft = null;
+  view = "home";
+  render();
+  window.scrollTo(0, 0);
+}
+
+function cancelSession() {
+  if (!confirm("Discard this session?")) return;
+  store.drop("sl.draft");
+  draft = null;
+  view = "home";
+  render();
+}
+
+function deleteSession(idx) {
+  if (!confirm("Delete this session from history? Future recommendations will no longer count it.")) return;
+  const all = sessions();
+  all.splice(idx, 1);
+  store.save("sl.sessions", all);
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
