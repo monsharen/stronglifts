@@ -219,6 +219,20 @@
 
   .sess-actions { margin-top: 22px; }
   .note { color: var(--dim); font-size: 11px; text-align: center; margin-top: 12px; }
+
+  .video-link {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--dim); text-decoration: none;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    padding: 6px 0;
+  }
+  .video-link .play {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1px solid var(--line); color: var(--volt); font-size: 8px;
+    padding-left: 1px;
+  }
+  .video-link:active { color: var(--chalk); }
 </style>
 </head>
 <body>
@@ -237,6 +251,10 @@ const EXERCISES = {
   deadlift: { name: "Deadlift",       sets: 1, reps: 5, inc: 5,   start: 40 },
 };
 const WORKOUTS = { A: ["squat", "bench", "row"], B: ["squat", "ohp", "deadlift"] };
+const VIDEOS = {
+  A: "https://www.youtube.com/watch?v=EP2g3Sj3qSw",
+  B: "https://www.youtube.com/watch?v=ro3Mh9o7JPU",
+};
 const MIN_WEIGHT = 20;        // empty bar
 const DELOAD_AFTER = 3;       // failed sessions at same weight
 const DELOAD_FACTOR = 0.9;
@@ -394,6 +412,7 @@ function homeHTML() {
       <div class="kicker">Next up</div>
       <h2>Workout <span class="letter">${type}</span></h2>
       ${rows}
+      <a class="video-link" href="${VIDEOS[type]}" target="_blank" rel="noopener"><span class="play">▶</span>Watch workout ${type} video</a>
     </div>
     <button class="btn btn-volt" onclick="startSession()">Start workout ${type}</button>
     <div class="section-title"><span>History</span><span>${hist.length} session${hist.length === 1 ? "" : "s"}</span></div>
@@ -435,6 +454,7 @@ function sessionHTML() {
     <div class="sess-head">
       <div class="kicker">${fmtDate(draft.startedAt)}</div>
       <h2>Workout <span class="letter">${draft.type}</span></h2>
+      <a class="video-link" href="${VIDEOS[draft.type]}" target="_blank" rel="noopener"><span class="play">▶</span>Watch workout ${draft.type} video</a>
     </div>
     ${cards}
     <div class="sess-actions">
