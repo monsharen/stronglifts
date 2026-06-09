@@ -233,6 +233,47 @@
     padding-left: 1px;
   }
   .video-link:active { color: var(--chalk); }
+
+  /* ---------- rest timer ---------- */
+  .rest-bar {
+    position: fixed; z-index: 10;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 50%; transform: translateX(-50%);
+    width: min(448px, calc(100% - 32px));
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 30px rgba(0,0,0,.55);
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .rest-start {
+    flex: 1;
+    background: none; border: none; cursor: pointer;
+    color: var(--chalk);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 8px 0;
+  }
+  .rest-start .play { color: var(--volt); margin-right: 8px; }
+  .rest-time {
+    font-family: "Big Shoulders Display", sans-serif;
+    font-weight: 900; font-size: 32px; line-height: 1;
+    min-width: 86px;
+    font-variant-numeric: tabular-nums;
+  }
+  .rest-msg { flex: 1; color: var(--dim); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .rest-stop {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    padding: 12px 16px; cursor: pointer;
+  }
+  .rest-bar.over { border-color: var(--fail); animation: rest-pulse 1.2s ease-in-out infinite; }
+  .rest-bar.over .rest-time, .rest-bar.over .rest-msg { color: var(--fail); }
+  @keyframes rest-pulse {
+    50% { box-shadow: 0 8px 30px rgba(255,90,72,.25); }
+  }
 </style>
 </head>
 <body>
@@ -340,6 +381,7 @@ const app = document.getElementById("app");
 const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmtKg = w => (w % 1 === 0 ? w : w.toFixed(1)) + " kg";
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const fmtClock = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 
 const WHY_LABEL = {
   start: "starting weight",
@@ -461,8 +503,66 @@ function sessionHTML() {
       <button class="btn btn-volt" onclick="finishSession()">Finish &amp; save</button>
       <button class="btn btn-ghost" onclick="cancelSession()">Discard session</button>
       <div class="note">Tap a circle once for all ${5} reps, tap again to count down. Progress is kept if you close the page.</div>
-    </div>`;
+    </div>
+    ${restBarHTML()}`;
 }
+
+/* ================= rest timer ================= */
+
+function restGuide() {
+  // StrongLifts guideline: ~3 min between sets, 5 min after a failed set
+  const t = draft.lastSet;
+  if (t) {
+    const e = draft.entries[t.ei];
+    if (e) {
+      const reps = e.setReps[t.si];
+      if (reps !== null && reps < EXERCISES[e.ex].reps) return 300;
+    }
+  }
+  return 180;
+}
+
+function restBarHTML() {
+  if (!draft.rest) {
+    return `<div class="rest-bar"><button class="rest-start" onclick="startRest()"><span class="play">▶</span>Start rest timer</button></div>`;
+  }
+  const sec = Math.max(0, Math.floor((Date.now() - draft.rest.start) / 1000));
+  const over = sec > draft.rest.guide;
+  return `<div class="rest-bar ${over ? "over" : ""}" id="rest-bar">
+    <span class="rest-time" id="rest-elapsed">${fmtClock(sec)}</span>
+    <span class="rest-msg" id="rest-msg">${over ? "too long — go lift" : "guide " + fmtClock(draft.rest.guide)}</span>
+    <button class="rest-stop" onclick="stopRest()">Stop</button>
+  </div>`;
+}
+
+function startRest() {
+  draft.rest = { start: Date.now(), guide: restGuide() };
+  saveDraft();
+  render();
+}
+
+function stopRest() {
+  draft.rest = null;
+  saveDraft();
+  render();
+}
+
+function tickRest() {
+  if (!draft || !draft.rest) return;
+  const el = document.getElementById("rest-elapsed");
+  if (!el) return;
+  const sec = Math.max(0, Math.floor((Date.now() - draft.rest.start) / 1000));
+  const over = sec > draft.rest.guide;
+  el.textContent = fmtClock(sec);
+  document.getElementById("rest-msg").textContent = over ? "too long — go lift" : "guide " + fmtClock(draft.rest.guide);
+  document.getElementById("rest-bar").classList.toggle("over", over);
+  if (over && !draft.rest.buzzed) {
+    draft.rest.buzzed = true;
+    saveDraft();
+    if (navigator.vibrate) navigator.vibrate(200);
+  }
+}
+setInterval(tickRest, 500);
 
 /* ================= stats ================= */
 
@@ -560,6 +660,7 @@ function tapSet(ei, si) {
   const target = EXERCISES[e.ex].reps;
   const cur = e.setReps[si];
   e.setReps[si] = cur === null ? target : cur === 0 ? null : cur - 1;
+  draft.lastSet = { ei, si };
   saveDraft();
   render();
 }
