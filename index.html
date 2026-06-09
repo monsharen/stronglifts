@@ -559,7 +559,7 @@ function warmupHTML(e, ei) {
       const checked = e.wu && e.wu[ri];
       return `<div class="wu-set ${checked ? "checked" : ""}">
         <button class="wu-btn" onclick="tapWarmup(${ei},${ri})">${row.reps}</button>
-        <span class="wu-w">${row.w === 20 ? "bar" : fmtKg(row.w)}</span>
+        <span class="wu-w">${row.w === 20 ? "bar only" : fmtKg(row.w)}</span>
       </div>`;
     }).join("") + `</div>`;
   }
