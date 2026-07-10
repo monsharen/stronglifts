@@ -636,6 +636,28 @@ function tickRest() {
 }
 setInterval(tickRest, 500);
 
+/* ================= screen wake lock ================= */
+
+/* Keep the screen on while a session is ongoing. The browser releases the
+   lock whenever the page is hidden, so re-acquire on visibilitychange. */
+let wakeLock = null;
+
+async function syncWakeLock() {
+  if (!("wakeLock" in navigator)) return;
+  const want = !!draft && document.visibilityState === "visible";
+  if (want && !wakeLock) {
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } catch { /* denied (e.g. battery saver) — nothing we can do */ }
+  } else if (!want && wakeLock) {
+    const lock = wakeLock;
+    wakeLock = null;
+    try { await lock.release(); } catch {}
+  }
+}
+document.addEventListener("visibilitychange", syncWakeLock);
+
 /* ================= stats ================= */
 
 /* Per-exercise series oldest → newest: { weight, ok, date } */
@@ -723,6 +745,7 @@ function startSession() {
   draft = newDraft();
   saveDraft();
   view = "session";
+  syncWakeLock();
   render();
   window.scrollTo(0, 0);
 }
@@ -763,6 +786,7 @@ function finishSession() {
   store.drop("sl.draft");
   draft = null;
   view = "home";
+  syncWakeLock();
   render();
   window.scrollTo(0, 0);
 }
@@ -772,6 +796,7 @@ function cancelSession() {
   store.drop("sl.draft");
   draft = null;
   view = "home";
+  syncWakeLock();
   render();
 }
 
@@ -784,6 +809,7 @@ function deleteSession(idx) {
 }
 
 render();
+syncWakeLock(); // a restored draft means a session is already ongoing
 </script>
 </body>
 </html>
