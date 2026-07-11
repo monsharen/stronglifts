@@ -100,6 +100,14 @@
     font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
   }
   .bw-form button:active { background: var(--line); }
+  .data-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .data-actions button {
+    flex: 1; min-height: 48px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+  }
+  .data-actions button:active { background: var(--line); }
 
   /* ---------- home: next workout card ---------- */
   .next-card {
@@ -787,7 +795,76 @@ function statsHTML() {
 
   return `${headerHTML()}
     ${main}
-    ${bodyweightHTML()}`;
+    ${bodyweightHTML()}
+    <div class="section-title"><span>Your data</span></div>
+    <div class="chart-card">
+      <div class="wu-none">Your log is stored on this device and browser only. Copy a backup here, then import it in another browser — for example to move your history into the home-screen app.</div>
+      <div class="data-actions">
+        <button onclick="exportData()">Copy backup</button>
+        <button onclick="importData()">Import backup</button>
+      </div>
+    </div>`;
+}
+
+/* ---------- backup / transfer ---------- */
+
+async function exportData() {
+  const payload = JSON.stringify({
+    app: "stronglifts-log",
+    exportedAt: new Date().toISOString(),
+    sessions: sessions(),
+    bw: bodyweights(),
+  });
+  try {
+    await navigator.clipboard.writeText(payload);
+    alert("Backup copied to clipboard.\n\nOpen the app in the other browser, go to Stats and tap Import backup.");
+  } catch {
+    prompt("Clipboard unavailable — copy this backup text manually:", payload);
+  }
+}
+
+async function importData() {
+  let raw = null;
+  try { raw = await navigator.clipboard.readText(); } catch { /* fall through to prompt */ }
+  if (!raw || !raw.trim().startsWith("{")) raw = prompt("Paste your backup here:");
+  if (!raw) return;
+
+  let data;
+  try { data = JSON.parse(raw); } catch { data = null; }
+  if (!data || !Array.isArray(data.sessions)) {
+    alert("That doesn't look like a backup — nothing was imported.");
+    return;
+  }
+
+  // Merge by union, never overwrite: sessions keyed by startedAt, bodyweight by date
+  const all = sessions();
+  const seen = new Set(all.map(s => s.startedAt));
+  let addedSessions = 0;
+  for (const s of data.sessions) {
+    if (s && s.startedAt && Array.isArray(s.entries) && !seen.has(s.startedAt)) {
+      all.push(s);
+      seen.add(s.startedAt);
+      addedSessions++;
+    }
+  }
+  all.sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+  store.save("sl.sessions", all);
+
+  const bw = bodyweights();
+  const seenBw = new Set(bw.map(b => b.date));
+  let addedBw = 0;
+  for (const b of (Array.isArray(data.bw) ? data.bw : [])) {
+    if (b && b.date && typeof b.kg === "number" && !seenBw.has(b.date)) {
+      bw.push(b);
+      seenBw.add(b.date);
+      addedBw++;
+    }
+  }
+  bw.sort((a, b) => new Date(a.date) - new Date(b.date));
+  store.save("sl.bw", bw);
+
+  render();
+  alert(`Import complete: ${addedSessions} new session${addedSessions === 1 ? "" : "s"}, ${addedBw} new bodyweight entr${addedBw === 1 ? "y" : "ies"}.`);
 }
 
 /* ---------- bodyweight ---------- */
