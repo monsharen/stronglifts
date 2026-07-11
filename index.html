@@ -524,7 +524,7 @@ function sessionHTML() {
     <div class="sess-actions">
       <button class="btn btn-volt" onclick="finishSession()">Finish &amp; save</button>
       <button class="btn btn-ghost" onclick="cancelSession()">Discard session</button>
-      <div class="note">Tap a circle once for all ${5} reps, tap again to count down. Progress is kept if you close the page.</div>
+      <div class="note">Tap a circle once for all reps, tap again to count down. Logging a set starts the rest timer. Progress is kept if you close the page.</div>
     </div>
     ${restBarHTML()}`;
 }
@@ -607,7 +607,33 @@ function restBarHTML() {
   </div>`;
 }
 
+/* Audio must be unlocked by a user gesture (iOS); armAudio is called from taps. */
+let audioCtx = null;
+function armAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch { /* no audio support */ }
+}
+
+function beep() {
+  if (!audioCtx || audioCtx.state !== "running") return;
+  const t0 = audioCtx.currentTime;
+  [0, 0.25].forEach(dt => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "square";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.12, t0 + dt);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + dt + 0.18);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0 + dt);
+    osc.stop(t0 + dt + 0.2);
+  });
+}
+
 function startRest() {
+  armAudio();
   draft.rest = { start: Date.now(), guide: restGuide() };
   saveDraft();
   render();
@@ -632,6 +658,7 @@ function tickRest() {
     draft.rest.buzzed = true;
     saveDraft();
     if (navigator.vibrate) navigator.vibrate(200);
+    beep();
   }
 }
 setInterval(tickRest, 500);
@@ -733,6 +760,12 @@ function tapSet(ei, si) {
   const cur = e.setReps[si];
   e.setReps[si] = cur === null ? target : cur === 0 ? null : cur - 1;
   draft.lastSet = { ei, si };
+  if (e.setReps[si] === null) {
+    draft.rest = null;
+  } else {
+    armAudio();
+    draft.rest = { start: Date.now(), guide: restGuide() };
+  }
   saveDraft();
   render();
 }
