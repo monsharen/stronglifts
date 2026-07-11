@@ -77,10 +77,26 @@
   }
   .chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
   .chart-head h3 { font-size: 20px; font-weight: 900; }
-  .chart-head .cur { font-weight: 700; font-size: 14px; color: var(--volt); }
+  .chart-head .cur { font-weight: 700; font-size: 14px; color: var(--volt); text-align: right; margin-left: 12px; }
   .chart-head .cur .best { color: var(--dim); font-weight: 400; font-size: 11px; margin-left: 6px; }
   .chart-card svg { display: block; width: 100%; height: auto; }
   .chart-dates { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; margin-top: 4px; }
+
+  .bw-form { display: flex; gap: 8px; margin-top: 12px; }
+  .bw-form input {
+    flex: 1; min-height: 48px; min-width: 0;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 22px;
+    text-align: center;
+  }
+  .bw-form input:focus { outline: 1px solid var(--volt); border-color: var(--volt); }
+  .bw-form button {
+    flex: 0 0 auto; padding: 0 18px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "IBM Plex Mono", monospace;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+  }
+  .bw-form button:active { background: var(--line); }
 
   /* ---------- home: next workout card ---------- */
   .next-card {
@@ -684,8 +700,8 @@ function fmtVolume(kg) {
   return kg >= 1000 ? (kg / 1000).toFixed(1).replace(/\.0$/, "") + " t" : kg + " kg";
 }
 
-function chartSVG(pts) {
-  const W = 320, H = 110, P = { l: 34, r: 12, t: 12, b: 8 };
+function chartSVG(pts, prIdx = -1) {
+  const W = 320, H = 110, P = { l: 34, r: 12, t: prIdx >= 0 ? 26 : 12, b: 8 };
   const ws = pts.map(p => p.weight);
   let min = Math.min(...ws), max = Math.max(...ws);
   if (min === max) { min -= 2.5; max += 2.5; }
@@ -705,49 +721,122 @@ function chartSVG(pts) {
   const dots = pts.map((p, i) =>
     `<circle cx="${x(i)}" cy="${y(p.weight)}" r="3.5" fill="${p.ok ? "#d8ff3e" : "#101216"}" stroke="${p.ok ? "#d8ff3e" : "#ff5a48"}" stroke-width="2"/>`).join("");
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${line}${dots}</svg>`;
+  const pr = prIdx >= 0
+    ? `<circle cx="${x(prIdx)}" cy="${y(pts[prIdx].weight)}" r="7.5" fill="none" stroke="#d8ff3e" stroke-width="1.5" stroke-dasharray="2 2"/>
+       <text x="${x(prIdx)}" y="${y(pts[prIdx].weight) - 11}" text-anchor="middle" fill="#d8ff3e" font-size="9" font-weight="bold" font-family="IBM Plex Mono, monospace">PR</text>`
+    : "";
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${line}${dots}${pr}</svg>`;
 }
+
+/* Epley estimated 1RM from a 5-rep working weight */
+const e1rm = (w, reps) => Math.round(w * (1 + reps / 30) * 10) / 10;
 
 function statsHTML() {
   const all = sessions();
+  let main;
   if (!all.length) {
-    return `${headerHTML()}<div class="empty">No data yet. Log a session first.</div>`;
-  }
-  let vol = 0, reps = 0;
-  for (const s of all)
-    for (const e of s.entries)
-      for (const r of e.setReps) { reps += r; vol += r * e.weight; }
+    main = `<div class="empty">No workout data yet. Log a session first.</div>`;
+  } else {
+    let vol = 0, reps = 0;
+    for (const s of all)
+      for (const e of s.entries)
+        for (const r of e.setReps) { reps += r; vol += r * e.weight; }
 
-  const tiles = `<div class="tiles">
-    <div class="tile"><div class="num">${all.length}</div><div class="lbl">Sessions</div></div>
-    <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Volume</div></div>
-    <div class="tile"><div class="num">${reps}</div><div class="lbl">Reps</div></div>
-  </div>`;
-
-  const charts = Object.keys(EXERCISES).map(ex => {
-    const pts = exerciseSeries(ex);
-    if (!pts.length) return "";
-    const def = EXERCISES[ex];
-    const cur = pts[pts.length - 1].weight;
-    const best = Math.max(...pts.map(p => p.weight));
-    return `<div class="chart-card">
-      <div class="chart-head">
-        <h3>${def.name}</h3>
-        <span class="cur">${fmtKg(cur)}<span class="best">best ${fmtKg(best)}</span></span>
-      </div>
-      ${chartSVG(pts)}
-      <div class="chart-dates">
-        <span>${fmtDate(pts[0].date)}</span>
-        <span>${pts.length} session${pts.length === 1 ? "" : "s"}</span>
-        <span>${fmtDate(pts[pts.length - 1].date)}</span>
-      </div>
+    const tiles = `<div class="tiles">
+      <div class="tile"><div class="num">${all.length}</div><div class="lbl">Sessions</div></div>
+      <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Volume</div></div>
+      <div class="tile"><div class="num">${reps}</div><div class="lbl">Reps</div></div>
     </div>`;
-  }).join("");
+
+    const charts = Object.keys(EXERCISES).map(ex => {
+      const pts = exerciseSeries(ex);
+      if (!pts.length) return "";
+      const def = EXERCISES[ex];
+      const cur = pts[pts.length - 1].weight;
+      const okWeights = pts.filter(p => p.ok).map(p => p.weight);
+      const bestOk = okWeights.length ? Math.max(...okWeights) : null;
+      let prIdx = -1;
+      if (bestOk !== null)
+        for (let i = pts.length - 1; i >= 0; i--)
+          if (pts[i].ok && pts[i].weight === bestOk) { prIdx = i; break; }
+      const sub = bestOk !== null
+        ? `PR ${fmtKg(bestOk)} · e1RM ~${fmtKg(e1rm(bestOk, def.reps))}`
+        : `best ${fmtKg(Math.max(...pts.map(p => p.weight)))} (not completed)`;
+      return `<div class="chart-card">
+        <div class="chart-head">
+          <h3>${def.name}</h3>
+          <span class="cur">${fmtKg(cur)}<span class="best">${sub}</span></span>
+        </div>
+        ${chartSVG(pts, prIdx)}
+        <div class="chart-dates">
+          <span>${fmtDate(pts[0].date)}</span>
+          <span>${pts.length} session${pts.length === 1 ? "" : "s"}</span>
+          <span>${fmtDate(pts[pts.length - 1].date)}</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    main = `${tiles}
+      <div class="section-title"><span>Working weight over time</span></div>
+      ${charts}`;
+  }
 
   return `${headerHTML()}
-    ${tiles}
-    <div class="section-title"><span>Working weight over time</span></div>
-    ${charts}`;
+    ${main}
+    ${bodyweightHTML()}`;
+}
+
+/* ---------- bodyweight ---------- */
+
+const bodyweights = () => store.load("sl.bw", []); // oldest first: { date, kg }
+
+function bodyweightHTML() {
+  const bw = bodyweights();
+  let body;
+  if (!bw.length) {
+    body = `<div class="wu-none">No entries yet. Weigh in and log it here to track bodyweight alongside your lifts.</div>`;
+  } else {
+    const cur = bw[bw.length - 1].kg;
+    const delta = Math.round((cur - bw[0].kg) * 10) / 10;
+    const deltaTxt = delta === 0 ? "±0 kg" : (delta > 0 ? "+" : "") + delta + " kg";
+    body = `<div class="chart-head">
+        <h3>Current</h3>
+        <span class="cur">${fmtKg(cur)}<span class="best">${deltaTxt} since ${fmtDate(bw[0].date)}</span></span>
+      </div>
+      ${bw.length > 1 ? chartSVG(bw.map(b => ({ weight: b.kg, ok: true, date: b.date }))) : ""}
+      <button class="hist-del" onclick="deleteBodyweight()">delete latest entry</button>`;
+  }
+  return `<div class="section-title"><span>Bodyweight</span><span>${bw.length ? bw.length + " entr" + (bw.length === 1 ? "y" : "ies") : ""}</span></div>
+    <div class="chart-card">
+      ${body}
+      <div class="bw-form">
+        <input type="number" inputmode="decimal" step="0.1" min="0" id="bw-input" placeholder="kg">
+        <button onclick="logBodyweight()">Log weight</button>
+      </div>
+    </div>`;
+}
+
+function logBodyweight() {
+  const inp = document.getElementById("bw-input");
+  const w = parseFloat(inp.value);
+  if (isNaN(w) || w <= 0) { inp.focus(); return; }
+  const bw = bodyweights();
+  const now = new Date().toISOString();
+  const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+  const entry = { date: now, kg: Math.round(w * 10) / 10 };
+  if (bw.length && sameDay(bw[bw.length - 1].date, now)) bw[bw.length - 1] = entry;
+  else bw.push(entry);
+  store.save("sl.bw", bw);
+  render();
+}
+
+function deleteBodyweight() {
+  const bw = bodyweights();
+  if (!bw.length || !confirm("Remove the latest bodyweight entry?")) return;
+  bw.pop();
+  store.save("sl.bw", bw);
+  render();
 }
 
 /* ================= actions ================= */
