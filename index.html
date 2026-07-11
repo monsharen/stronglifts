@@ -109,6 +109,7 @@
   }
   .preview-row .ex { font-family: "Big Shoulders Display", sans-serif; font-weight: 700; font-size: 19px; text-transform: uppercase; }
   .preview-row .scheme { color: var(--dim); font-size: 12px; margin-left: 8px; }
+  .preview-row .kg .scheme { margin-left: 0; margin-right: 8px; font-weight: 400; }
   .preview-row .kg { font-weight: 700; font-size: 15px; }
   .preview-row .kg.deload { color: var(--fail); }
   .preview-row .kg.up { color: var(--volt); }
@@ -355,14 +356,15 @@ function roundToPlate(w) {
   return Math.max(MIN_WEIGHT, Math.round(w / 2.5) * 2.5);
 }
 
-/* Returns { weight, why } per StrongLifts progression rules */
+/* Returns { weight, why, fails } per StrongLifts progression rules.
+   fails = consecutive failed sessions at the recommended weight so far. */
 function recommend(ex) {
   const def = EXERCISES[ex];
   const hist = exerciseHistory(ex);
-  if (!hist.length) return { weight: def.start, why: "start" };
+  if (!hist.length) return { weight: def.start, why: "start", fails: 0 };
 
   const last = hist[hist.length - 1];
-  if (isSuccess(last)) return { weight: last.weight + def.inc, why: "up" };
+  if (isSuccess(last)) return { weight: last.weight + def.inc, why: "up", fails: 0 };
 
   let fails = 0;
   for (let i = hist.length - 1; i >= 0; i--) {
@@ -370,8 +372,8 @@ function recommend(ex) {
     if (e.weight === last.weight && !isSuccess(e)) fails++;
     else break;
   }
-  if (fails >= DELOAD_AFTER) return { weight: roundToPlate(last.weight * DELOAD_FACTOR), why: "deload" };
-  return { weight: last.weight, why: "repeat" };
+  if (fails >= DELOAD_AFTER) return { weight: roundToPlate(last.weight * DELOAD_FACTOR), why: "deload", fails };
+  return { weight: last.weight, why: "repeat", fails };
 }
 
 /* ================= app state ================= */
@@ -388,7 +390,7 @@ function newDraft() {
     startedAt: new Date().toISOString(),
     entries: WORKOUTS[type].map(ex => {
       const rec = recommend(ex);
-      return { ex, weight: rec.weight, why: rec.why, setReps: Array(EXERCISES[ex].sets).fill(null) };
+      return { ex, weight: rec.weight, why: rec.why, fails: rec.fails, setReps: Array(EXERCISES[ex].sets).fill(null) };
     }),
   };
 }
@@ -403,12 +405,15 @@ const fmtKg = w => (w % 1 === 0 ? w : w.toFixed(1)) + " kg";
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const fmtClock = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 
-const WHY_LABEL = {
-  start: "starting weight",
-  up: "+weight — last session completed",
-  repeat: "repeat — last session not completed",
-  deload: "deload 10% — failed 3× at this weight",
-};
+function whyLabel(rec) {
+  const fails = rec.fails || 0;
+  switch (rec.why) {
+    case "up": return "+weight — last session completed";
+    case "repeat": return `attempt ${fails + 1} of ${DELOAD_AFTER} at this weight — deload after ${DELOAD_AFTER} fails`;
+    case "deload": return `deload 10% — failed ${DELOAD_AFTER}× at this weight`;
+    default: return "starting weight";
+  }
+}
 
 function render() {
   app.innerHTML = view === "session" ? sessionHTML() : view === "stats" ? statsHTML() : homeHTML();
@@ -439,9 +444,10 @@ function homeHTML() {
     const def = EXERCISES[ex];
     const rec = recommend(ex);
     const cls = rec.why === "deload" ? "deload" : rec.why === "up" ? "up" : "";
+    const attempt = rec.why === "repeat" ? `<span class="scheme">try ${rec.fails + 1}/${DELOAD_AFTER}</span>` : "";
     return `<div class="preview-row">
       <span class="ex">${def.name}<span class="scheme">${def.sets}×${def.reps}</span></span>
-      <span class="kg ${cls}">${fmtKg(rec.weight)}</span>
+      <span class="kg ${cls}">${attempt}${fmtKg(rec.weight)}</span>
     </div>`;
   }).join("");
 
@@ -498,7 +504,7 @@ function sessionHTML() {
         <h3>${def.name}</h3>
         <span class="scheme">${def.sets}×${def.reps}</span>
       </div>
-      <div class="hint ${hintCls}">${WHY_LABEL[e.why]}</div>
+      <div class="hint ${hintCls}">${whyLabel(e)}</div>
       <div class="weight-ctl">
         <button onclick="bumpWeight(${i},-2.5)" aria-label="decrease">−</button>
         <div class="wfield">
