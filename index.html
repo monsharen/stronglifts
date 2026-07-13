@@ -535,7 +535,7 @@ function sessionHTML() {
       <div class="weight-ctl">
         <button onclick="bumpWeight(${i},-2.5)" aria-label="decrease">−</button>
         <div class="wfield">
-          <input type="number" inputmode="decimal" step="2.5" min="0" value="${e.weight}"
+          <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${e.weight}"
                  onchange="setWeight(${i}, this.value)">
           <span class="unit">KG</span>
         </div>
@@ -891,7 +891,7 @@ function bodyweightHTML() {
     <div class="chart-card">
       ${body}
       <div class="bw-form">
-        <input type="number" inputmode="decimal" step="0.1" min="0" id="bw-input" placeholder="kg">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="bw-input" placeholder="kg">
         <button onclick="logBodyweight()">Log weight</button>
       </div>
     </div>`;
@@ -899,7 +899,7 @@ function bodyweightHTML() {
 
 function logBodyweight() {
   const inp = document.getElementById("bw-input");
-  const w = parseFloat(inp.value);
+  const w = parseFloat(inp.value.replace(",", "."));
   if (isNaN(w) || w <= 0) { inp.focus(); return; }
   const bw = bodyweights();
   const now = new Date().toISOString();
@@ -953,7 +953,7 @@ function bumpWeight(ei, delta) {
 }
 
 function setWeight(ei, val) {
-  const w = parseFloat(val);
+  const w = parseFloat(String(val).replace(",", "."));
   draft.entries[ei].weight = isNaN(w) || w < 0 ? 0 : Math.round(w * 10) / 10;
   saveDraft();
   render();
