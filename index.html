@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#101216">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>STRONGLIFTS LOG</title>
+<title>HEALTH LOG</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -84,6 +84,32 @@
   .chart-head .cur .best { color: var(--dim); font-weight: 400; font-size: 11px; margin-left: 6px; }
   .chart-card svg { display: block; width: 100%; height: auto; }
   .chart-dates { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; margin-top: 4px; }
+  .chart-card.tap { cursor: pointer; }
+  .chart-card.tap:active { background: var(--panel-2); }
+
+  /* ---------- dashboard ---------- */
+  .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .app-card {
+    position: relative; text-align: left; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; min-height: 108px;
+    color: var(--chalk); font-family: "IBM Plex Mono", monospace;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .app-card:active { background: var(--panel-2); }
+  .app-card .arrow { position: absolute; right: 12px; top: 10px; color: var(--dim); }
+  .app-card .app-name { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 22px; text-transform: uppercase; line-height: 1.1; }
+  .app-card .app-name .bar { color: var(--volt); }
+  .app-card .app-tag { color: var(--dim); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+  .app-card .app-status { margin-top: auto; padding-top: 10px; font-size: 11px; color: var(--volt); }
+
+  .h-left { display: flex; align-items: center; gap: 10px; }
+  .back {
+    background: none; border: none; cursor: pointer;
+    color: var(--dim); font-family: "IBM Plex Mono", monospace; font-size: 20px;
+    padding: 2px 4px 2px 0; line-height: 1;
+  }
+  .back:active { color: var(--chalk); }
 
   .bw-form { display: flex; gap: 8px; margin-top: 12px; }
   .bw-form input {
@@ -403,12 +429,53 @@ function recommend(ex) {
   return { weight: last.weight, why: "repeat", fails };
 }
 
-/* ================= app state ================= */
+/* ================= app registry =================
+   The dashboard builds itself from this list. To add a new app:
+   add an entry here, its routes in ROUTES, and its view in render(). */
+const APPS = [
+  {
+    id: "stronglifts",
+    name: `STRONG<span class="bar">LIFTS</span>`,
+    tagline: "5×5 barbell program",
+    route: "#/stronglifts",
+    status() {
+      if (draft) return "Workout in progress";
+      return sessions().length ? `Next: workout ${nextWorkoutType()}` : "Start your first workout";
+    },
+  },
+  {
+    id: "weight",
+    name: "WEIGHT",
+    tagline: "Bodyweight log",
+    route: "#/weight",
+    status() {
+      const bw = bodyweights();
+      return bw.length ? `Current ${fmtKg(bw[bw.length - 1].kg)}` : "Log your first weigh-in";
+    },
+  },
+];
 
-let view = "home";   // "home" | "session" | "stats"
+/* ================= app state / routing ================= */
+
 let draft = store.load("sl.draft", null);
-if (draft) view = "session";
-else if (location.hash === "#stats") view = "stats";
+
+const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight"];
+function parseRoute(h) {
+  if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
+  return ROUTES.includes(h) ? h : "#/";
+}
+let route = parseRoute(location.hash);
+if (draft && route === "#/") route = "#/stronglifts"; // resume mid-workout on open
+
+function navigate(r) {
+  if (location.hash === r) { route = r; render(); window.scrollTo(0, 0); }
+  else location.hash = r;
+}
+window.addEventListener("hashchange", () => {
+  route = parseRoute(location.hash);
+  render();
+  window.scrollTo(0, 0);
+});
 
 function newDraft() {
   const type = nextWorkoutType();
@@ -443,26 +510,31 @@ function whyLabel(rec) {
 }
 
 function render() {
-  app.innerHTML = view === "session" ? sessionHTML() : view === "stats" ? statsHTML() : homeHTML();
+  app.innerHTML =
+    route === "#/stronglifts" ? (draft ? sessionHTML() : homeHTML())
+    : route === "#/stronglifts/stats" ? statsHTML()
+    : route === "#/weight" ? weightHTML()
+    : dashHTML();
 }
 
-function headerHTML() {
-  const right = view === "session"
-    ? `<span class="tag">5×5 log</span>`
-    : `<nav class="tabs">
-        <button class="tab ${view === "home" ? "active" : ""}" onclick="switchView('home')">Log</button>
-        <button class="tab ${view === "stats" ? "active" : ""}" onclick="switchView('stats')">Stats</button>
-      </nav>`;
+function appHeaderHTML(title, right) {
   return `<header>
-    <h1>STRONG<span class="bar">LIFTS</span></h1>
+    <div class="h-left">
+      <button class="back" onclick="navigate('#/')" aria-label="Back to dashboard">←</button>
+      <h1>${title}</h1>
+    </div>
     ${right}
   </header>`;
 }
 
-function switchView(v) {
-  view = v;
-  render();
-  window.scrollTo(0, 0);
+function slHeaderHTML() {
+  const right = draft
+    ? `<span class="tag">5×5 log</span>`
+    : `<nav class="tabs">
+        <button class="tab ${route === "#/stronglifts" ? "active" : ""}" onclick="navigate('#/stronglifts')">Log</button>
+        <button class="tab ${route === "#/stronglifts/stats" ? "active" : ""}" onclick="navigate('#/stronglifts/stats')">Stats</button>
+      </nav>`;
+  return appHeaderHTML(`STRONG<span class="bar">LIFTS</span>`, right);
 }
 
 function homeHTML() {
@@ -502,7 +574,7 @@ function homeHTML() {
       }).join("")
     : `<div class="empty">No sessions yet. Lift something heavy.</div>`;
 
-  return `${headerHTML()}
+  return `${slHeaderHTML()}
     <div class="next-card" data-letter="${type}">
       <div class="kicker">Next up</div>
       <h2>Workout <span class="letter">${type}</span></h2>
@@ -547,7 +619,7 @@ function sessionHTML() {
     </div>`;
   }).join("");
 
-  return `${headerHTML()}
+  return `${slHeaderHTML()}
     <div class="sess-head">
       <div class="kicker">${fmtDate(draft.startedAt)}</div>
       <h2>Workout <span class="letter">${draft.type}</span></h2>
@@ -882,12 +954,68 @@ function statsHTML() {
       ${charts}`;
   }
 
-  return `${headerHTML()}
-    ${main}
-    ${bodyweightHTML()}
+  return `${slHeaderHTML()}
+    ${main}`;
+}
+
+/* ================= dashboard ================= */
+
+function dashHTML() {
+  const all = sessions();
+  const bw = bodyweights();
+
+  let vol = 0;
+  for (const s of all)
+    for (const e of s.entries)
+      for (const r of e.setReps) vol += r * e.weight;
+
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Lifted</div></div>
+    <div class="tile"><div class="num">${bw.length ? bw[bw.length - 1].kg : "–"}</div><div class="lbl">Bodyweight kg</div></div>
+    <div class="tile"><div class="num">${all.length}</div><div class="lbl">Workouts</div></div>
+  </div>`;
+
+  const appCards = APPS.map(a => `<button class="app-card" onclick="navigate('${a.route}')">
+    <span class="arrow">→</span>
+    <div class="app-name">${a.name}</div>
+    <div class="app-tag">${a.tagline}</div>
+    <div class="app-status">${a.status()}</div>
+  </button>`).join("");
+
+  const volPts = volumeSeries();
+  const lifted = volPts.length ? `<div class="chart-card tap" onclick="navigate('#/stronglifts/stats')">
+    <div class="chart-head">
+      <h3>Weight lifted</h3>
+      <span class="cur">${fmtVolume(volPts[volPts.length - 1].weight)}<span class="best">last workout</span></span>
+    </div>
+    ${volPts.length > 1 ? chartSVG(volPts, -1, w => fmtVolume(Math.round(w))) : ""}
+  </div>` : "";
+
+  const bwPts = bw.map(b => ({ weight: b.kg, ok: true, date: b.date }));
+  const logged = bwPts.length ? `<div class="chart-card tap" onclick="navigate('#/weight')">
+    <div class="chart-head">
+      <h3>Weight logged</h3>
+      <span class="cur">${fmtKg(bwPts[bwPts.length - 1].weight)}<span class="best">bodyweight</span></span>
+    </div>
+    ${bwPts.length > 1 ? chartSVG(bwPts) : ""}
+  </div>` : "";
+
+  const analytics = (lifted || logged)
+    ? lifted + logged
+    : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts or a weigh-in in Weight, and your combined analytics appear here.</div></div>`;
+
+  return `<header>
+      <h1>HEALTH<span class="bar">LOG</span></h1>
+      <span class="tag">dashboard</span>
+    </header>
+    ${tiles}
+    <div class="section-title"><span>Apps</span></div>
+    <div class="app-grid">${appCards}</div>
+    <div class="section-title"><span>Across your apps</span></div>
+    ${analytics}
     <div class="section-title"><span>Your data</span></div>
     <div class="chart-card">
-      <div class="wu-none">Your log is stored on this device and browser only. Copy a backup here, then import it in another browser — for example to move your history into the home-screen app.</div>
+      <div class="wu-none">All app data is stored on this device and browser only. Copy a backup here, then import it in another browser — for example to move your history into the home-screen app.</div>
       <div class="data-actions">
         <button onclick="exportData()">Copy backup</button>
         <button onclick="importData()">Import backup</button>
@@ -956,34 +1084,71 @@ async function importData() {
   alert(`Import complete: ${addedSessions} new session${addedSessions === 1 ? "" : "s"}, ${addedBw} new bodyweight entr${addedBw === 1 ? "y" : "ies"}.`);
 }
 
-/* ---------- bodyweight ---------- */
+/* ================= weight app ================= */
 
 const bodyweights = () => store.load("sl.bw", []); // oldest first: { date, kg }
 
-function bodyweightHTML() {
-  const bw = bodyweights();
-  let body;
-  if (!bw.length) {
-    body = `<div class="wu-none">No entries yet. Weigh in and log it here to track bodyweight alongside your lifts.</div>`;
-  } else {
-    const cur = bw[bw.length - 1].kg;
-    const delta = Math.round((cur - bw[0].kg) * 10) / 10;
-    const deltaTxt = delta === 0 ? "±0 kg" : (delta > 0 ? "+" : "") + delta + " kg";
-    body = `<div class="chart-head">
-        <h3>Current</h3>
-        <span class="cur">${fmtKg(cur)}<span class="best">${deltaTxt} since ${fmtDate(bw[0].date)}</span></span>
-      </div>
-      ${bw.length > 1 ? chartSVG(bw.map(b => ({ weight: b.kg, ok: true, date: b.date }))) : ""}
-      <button class="hist-del" onclick="deleteBodyweight()">delete latest entry</button>`;
+/* Change vs the last entry at least `days` days older than the newest; null if history is shorter */
+function bwChange(bw, days) {
+  const cutoff = new Date(bw[bw.length - 1].date).getTime() - days * 86400000;
+  let base = null;
+  for (const b of bw) {
+    if (new Date(b.date).getTime() <= cutoff) base = b;
+    else break;
   }
-  return `<div class="section-title"><span>Bodyweight</span><span>${bw.length ? bw.length + " entr" + (bw.length === 1 ? "y" : "ies") : ""}</span></div>
-    <div class="chart-card">
-      ${body}
-      <div class="bw-form">
-        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="bw-input" placeholder="kg">
-        <button onclick="logBodyweight()">Log weight</button>
-      </div>
+  return base ? Math.round((bw[bw.length - 1].kg - base.kg) * 10) / 10 : null;
+}
+
+const fmtDelta = d => d === null ? "–" : d === 0 ? "±0" : (d > 0 ? "+" : "") + d;
+
+function weightHTML() {
+  const bw = bodyweights();
+  const header = appHeaderHTML("WEIGHT", `<span class="tag">bodyweight</span>`);
+  const form = `<div class="bw-form">
+      <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="bw-input" placeholder="kg">
+      <button onclick="logBodyweight()">Log weight</button>
     </div>`;
+
+  if (!bw.length) {
+    return `${header}
+      <div class="chart-card">
+        <div class="wu-none">No entries yet. Weigh in and log it here — one entry per day, logging again the same day replaces it.</div>
+        ${form}
+      </div>`;
+  }
+
+  const cur = bw[bw.length - 1].kg;
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${cur}</div><div class="lbl">Current kg</div></div>
+    <div class="tile"><div class="num">${fmtDelta(bwChange(bw, 30))}</div><div class="lbl">30 days</div></div>
+    <div class="tile"><div class="num">${fmtDelta(Math.round((cur - bw[0].kg) * 10) / 10)}</div><div class="lbl">All time</div></div>
+  </div>`;
+
+  const pts = bw.map(b => ({ weight: b.kg, ok: true, date: b.date }));
+  const chart = `<div class="chart-card">
+      ${pts.length > 1
+        ? chartSVG(pts) + `<div class="chart-dates">
+            <span>${fmtDate(pts[0].date)}</span>
+            <span>${pts.length} entries</span>
+            <span>${fmtDate(pts[pts.length - 1].date)}</span>
+          </div>`
+        : `<div class="wu-none">Log a second weigh-in to see your trend.</div>`}
+      ${form}
+    </div>`;
+
+  const rows = bw.slice(-14).reverse().map(b => {
+    const idx = bw.indexOf(b);
+    return `<div class="hist-row">
+      <span>${fmtKg(b.kg)}</span>
+      <span class="reps">${fmtDate(b.date)} <button class="hist-del" onclick="deleteBwEntry(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
+    </div>`;
+  }).join("");
+
+  return `${header}
+    ${tiles}
+    ${chart}
+    <div class="section-title"><span>Entries</span><span>${bw.length} total${bw.length > 14 ? " · showing last 14" : ""}</span></div>
+    <div class="hist-card">${rows}</div>`;
 }
 
 function logBodyweight() {
@@ -1000,10 +1165,10 @@ function logBodyweight() {
   render();
 }
 
-function deleteBodyweight() {
+function deleteBwEntry(idx) {
   const bw = bodyweights();
-  if (!bw.length || !confirm("Remove the latest bodyweight entry?")) return;
-  bw.pop();
+  if (!bw[idx] || !confirm(`Remove the entry from ${fmtDate(bw[idx].date)}?`)) return;
+  bw.splice(idx, 1);
   store.save("sl.bw", bw);
   render();
 }
@@ -1013,9 +1178,7 @@ function deleteBodyweight() {
 function startSession() {
   draft = newDraft();
   saveDraft();
-  view = "session";
-  render();
-  window.scrollTo(0, 0);
+  navigate("#/stronglifts");
 }
 
 function tapSet(ei, si) {
@@ -1059,17 +1222,14 @@ function finishSession() {
   store.save("sl.sessions", all);
   store.drop("sl.draft");
   draft = null;
-  view = "home";
-  render();
-  window.scrollTo(0, 0);
+  navigate("#/stronglifts");
 }
 
 function cancelSession() {
   if (!confirm("Discard this session?")) return;
   store.drop("sl.draft");
   draft = null;
-  view = "home";
-  render();
+  navigate("#/stronglifts");
 }
 
 function deleteSession(idx) {
