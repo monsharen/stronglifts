@@ -1,7 +1,7 @@
 {
-  "name": "StrongLifts Log",
-  "short_name": "5×5 Log",
-  "description": "StrongLifts 5×5 workout logger",
+  "name": "Health Log",
+  "short_name": "Health",
+  "description": "Personal health apps — StrongLifts 5×5 logger, bodyweight tracking and combined analytics",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
