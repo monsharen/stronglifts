@@ -707,11 +707,45 @@ function exerciseSeries(ex) {
   return out;
 }
 
+/* Powerlifting total: squat + bench + deadlift, one point per session.
+   A lift missing from a session carries over from the last session that had it;
+   points start once all three lifts have been performed at least once. */
+const TOTAL_LIFTS = ["squat", "bench", "deadlift"];
+
+function totalSeries() {
+  const latest = {};
+  const out = [];
+  for (const s of sessions()) {
+    let ok = true;
+    for (const e of s.entries) {
+      if (TOTAL_LIFTS.includes(e.ex)) {
+        latest[e.ex] = e.weight;
+        if (!isSuccess(e)) ok = false;
+      }
+    }
+    if (TOTAL_LIFTS.every(ex => latest[ex] !== undefined)) {
+      const total = Math.round(TOTAL_LIFTS.reduce((sum, ex) => sum + latest[ex], 0) * 10) / 10;
+      out.push({ weight: total, ok, date: s.startedAt });
+    }
+  }
+  return out;
+}
+
+/* Total weight moved per session: every logged rep × its weight, all exercises */
+function volumeSeries() {
+  return sessions().map(s => {
+    let vol = 0;
+    for (const e of s.entries)
+      for (const r of e.setReps) vol += r * e.weight;
+    return { weight: Math.round(vol), ok: s.entries.every(isSuccess), date: s.startedAt };
+  });
+}
+
 function fmtVolume(kg) {
   return kg >= 1000 ? (kg / 1000).toFixed(1).replace(/\.0$/, "") + " t" : kg + " kg";
 }
 
-function chartSVG(pts, prIdx = -1) {
+function chartSVG(pts, prIdx = -1, fmtLabel = w => w) {
   const W = 320, H = 110, P = { l: 34, r: 12, t: prIdx >= 0 ? 26 : 12, b: 8 };
   const ws = pts.map(p => p.weight);
   let min = Math.min(...ws), max = Math.max(...ws);
@@ -724,7 +758,7 @@ function chartSVG(pts, prIdx = -1) {
   const gridW = [Math.max(...ws), Math.min(...ws)];
   const grid = gridW.map(w => `
     <line x1="${P.l}" y1="${y(w)}" x2="${W - P.r}" y2="${y(w)}" stroke="#2b303a" stroke-dasharray="3 4" stroke-width="1"/>
-    <text x="${P.l - 6}" y="${y(w) + 3}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">${w}</text>`).join("");
+    <text x="${P.l - 6}" y="${y(w) + 3}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">${fmtLabel(w)}</text>`).join("");
 
   const line = pts.length > 1
     ? `<polyline points="${pts.map((p, i) => `${x(i)},${y(p.weight)}`).join(" ")}" fill="none" stroke="#d8ff3e" stroke-width="2" stroke-linejoin="round"/>`
@@ -788,7 +822,62 @@ function statsHTML() {
       </div>`;
     }).join("");
 
+    const totalPts = totalSeries();
+    let totalCard = "";
+    if (totalPts.length) {
+      const cur = totalPts[totalPts.length - 1].weight;
+      const okTotals = totalPts.filter(p => p.ok).map(p => p.weight);
+      const bestOk = okTotals.length ? Math.max(...okTotals) : null;
+      let prIdx = -1;
+      if (bestOk !== null)
+        for (let i = totalPts.length - 1; i >= 0; i--)
+          if (totalPts[i].ok && totalPts[i].weight === bestOk) { prIdx = i; break; }
+      const sub = bestOk !== null
+        ? `PR ${fmtKg(bestOk)}`
+        : `best ${fmtKg(Math.max(...totalPts.map(p => p.weight)))} (not completed)`;
+      totalCard = `<div class="section-title"><span>Competition total · SQ + BP + DL</span></div>
+      <div class="chart-card">
+        <div class="chart-head">
+          <h3>Total</h3>
+          <span class="cur">${fmtKg(cur)}<span class="best">${sub}</span></span>
+        </div>
+        ${chartSVG(totalPts, prIdx)}
+        <div class="chart-dates">
+          <span>${fmtDate(totalPts[0].date)}</span>
+          <span>${totalPts.length} session${totalPts.length === 1 ? "" : "s"}</span>
+          <span>${fmtDate(totalPts[totalPts.length - 1].date)}</span>
+        </div>
+        <div class="wu-none" style="margin-top: 8px;">Combined working weight of squat, bench press and deadlift — the powerlifting total you compete with. A lift not in a session carries over from the last time you did it.</div>
+      </div>`;
+    }
+
+    const volPts = volumeSeries();
+    let volCard = "";
+    if (volPts.length) {
+      const cur = volPts[volPts.length - 1].weight;
+      const best = Math.max(...volPts.map(p => p.weight));
+      let bestIdx = -1;
+      for (let i = volPts.length - 1; i >= 0; i--)
+        if (volPts[i].weight === best) { bestIdx = i; break; }
+      volCard = `<div class="section-title"><span>Weight moved per session</span></div>
+      <div class="chart-card">
+        <div class="chart-head">
+          <h3>Session volume</h3>
+          <span class="cur">${fmtVolume(cur)}<span class="best">best ${fmtVolume(best)}</span></span>
+        </div>
+        ${chartSVG(volPts, bestIdx, w => fmtVolume(Math.round(w)))}
+        <div class="chart-dates">
+          <span>${fmtDate(volPts[0].date)}</span>
+          <span>${volPts.length} session${volPts.length === 1 ? "" : "s"}</span>
+          <span>${fmtDate(volPts[volPts.length - 1].date)}</span>
+        </div>
+        <div class="wu-none" style="margin-top: 8px;">Total weight moved in each workout, any type — every logged rep × its weight, all exercises combined.</div>
+      </div>`;
+    }
+
     main = `${tiles}
+      ${totalCard}
+      ${volCard}
       <div class="section-title"><span>Working weight over time</span></div>
       ${charts}`;
   }
