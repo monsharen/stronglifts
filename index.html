@@ -86,6 +86,8 @@
   .chart-dates { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; margin-top: 4px; }
   .chart-card.tap { cursor: pointer; }
   .chart-card.tap:active { background: var(--panel-2); }
+  .tile.tap { cursor: pointer; }
+  .tile.tap:active { background: var(--panel-2); }
 
   /* ---------- dashboard ---------- */
   .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -969,9 +971,14 @@ function dashHTML() {
     for (const e of s.entries)
       for (const r of e.setReps) vol += r * e.weight;
 
+  const b = bmi();
+  const bmiTile = b !== null
+    ? `<div class="tile"><div class="num">${b}</div><div class="lbl">BMI</div></div>`
+    : `<div class="tile tap" onclick="navigate('#/weight')"><div class="num">–</div><div class="lbl">BMI · set height</div></div>`;
   const tiles = `<div class="tiles">
     <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Lifted</div></div>
-    <div class="tile"><div class="num">${bw.length ? bw[bw.length - 1].kg : "–"}</div><div class="lbl">Bodyweight kg</div></div>
+    <div class="tile"><div class="num">${bw.length ? bw[bw.length - 1].kg : "–"}</div><div class="lbl">Weight kg</div></div>
+    ${bmiTile}
     <div class="tile"><div class="num">${all.length}</div><div class="lbl">Workouts</div></div>
   </div>`;
 
@@ -1031,6 +1038,7 @@ async function exportData() {
     exportedAt: new Date().toISOString(),
     sessions: sessions(),
     bw: bodyweights(),
+    height: heightCm(),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -1080,6 +1088,8 @@ async function importData() {
   bw.sort((a, b) => new Date(a.date) - new Date(b.date));
   store.save("sl.bw", bw);
 
+  if (typeof data.height === "number" && !heightCm()) store.save("sl.height", data.height);
+
   render();
   alert(`Import complete: ${addedSessions} new session${addedSessions === 1 ? "" : "s"}, ${addedBw} new bodyweight entr${addedBw === 1 ? "y" : "ies"}.`);
 }
@@ -1087,6 +1097,22 @@ async function importData() {
 /* ================= weight app ================= */
 
 const bodyweights = () => store.load("sl.bw", []); // oldest first: { date, kg }
+const heightCm = () => store.load("sl.height", null);
+
+/* BMI from the latest weigh-in; null until height and a weigh-in exist */
+function bmi() {
+  const h = heightCm(), bw = bodyweights();
+  if (!h || !bw.length) return null;
+  return Math.round(bw[bw.length - 1].kg / ((h / 100) ** 2) * 10) / 10;
+}
+
+function saveHeight() {
+  const inp = document.getElementById("height-input");
+  const h = parseFloat(String(inp.value).replace(",", "."));
+  if (isNaN(h) || h < 50 || h > 250) { inp.focus(); return; }
+  store.save("sl.height", Math.round(h));
+  render();
+}
 
 /* Change vs the last entry at least `days` days older than the newest; null if history is shorter */
 function bwChange(bw, days) {
@@ -1103,10 +1129,19 @@ const fmtDelta = d => d === null ? "–" : d === 0 ? "±0" : (d > 0 ? "+" : "") 
 
 function weightHTML() {
   const bw = bodyweights();
+  const h = heightCm();
   const header = appHeaderHTML("WEIGHT", `<span class="tag">bodyweight</span>`);
   const form = `<div class="bw-form">
       <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="bw-input" placeholder="kg">
       <button onclick="logBodyweight()">Log weight</button>
+    </div>`;
+  const profile = `<div class="section-title"><span>Profile</span></div>
+    <div class="chart-card">
+      <div class="wu-none">${h ? `Height ${h} cm — used to compute BMI from your latest weigh-in.` : "Set your height to see BMI here and on the dashboard."}</div>
+      <div class="bw-form">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="height-input" placeholder="cm" value="${h ?? ""}">
+        <button onclick="saveHeight()">Save height</button>
+      </div>
     </div>`;
 
   if (!bw.length) {
@@ -1114,12 +1149,14 @@ function weightHTML() {
       <div class="chart-card">
         <div class="wu-none">No entries yet. Weigh in and log it here — one entry per day, logging again the same day replaces it.</div>
         ${form}
-      </div>`;
+      </div>
+      ${profile}`;
   }
 
   const cur = bw[bw.length - 1].kg;
   const tiles = `<div class="tiles">
     <div class="tile"><div class="num">${cur}</div><div class="lbl">Current kg</div></div>
+    <div class="tile"><div class="num">${bmi() ?? "–"}</div><div class="lbl">BMI</div></div>
     <div class="tile"><div class="num">${fmtDelta(bwChange(bw, 30))}</div><div class="lbl">30 days</div></div>
     <div class="tile"><div class="num">${fmtDelta(Math.round((cur - bw[0].kg) * 10) / 10)}</div><div class="lbl">All time</div></div>
   </div>`;
@@ -1148,7 +1185,8 @@ function weightHTML() {
     ${tiles}
     ${chart}
     <div class="section-title"><span>Entries</span><span>${bw.length} total${bw.length > 14 ? " · showing last 14" : ""}</span></div>
-    <div class="hist-card">${rows}</div>`;
+    <div class="hist-card">${rows}</div>
+    ${profile}`;
 }
 
 function logBodyweight() {
