@@ -89,6 +89,25 @@
   .tile.tap { cursor: pointer; }
   .tile.tap:active { background: var(--panel-2); }
 
+  /* ---------- nudges & reminders ---------- */
+  .nudge-card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--volt);
+    border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px; font-size: 12px;
+  }
+  .nudge-card .n-row { padding: 2px 0; }
+  .nudge-card .n-row::before { content: "→ "; color: var(--volt); }
+  .tog-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); cursor: pointer; }
+  .tog-row:first-child { border-top: none; padding-top: 0; }
+  .tog-row .t-name { font-size: 13px; }
+  .tog-row .t-sub { color: var(--dim); font-size: 11px; }
+  .tog { flex: 0 0 44px; height: 26px; border-radius: 13px; border: 1px solid var(--line); background: var(--panel-2); position: relative; transition: background .15s; }
+  .tog::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--dim); transition: left .15s, background .15s;
+  }
+  .tog.on { background: var(--volt); border-color: var(--volt); }
+  .tog.on::after { left: 20px; background: var(--volt-ink); }
+
   /* ---------- dashboard ---------- */
   .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
   .app-card {
@@ -517,6 +536,7 @@ function render() {
     : route === "#/stronglifts/stats" ? statsHTML()
     : route === "#/weight" ? weightHTML()
     : dashHTML();
+  updateBadge();
 }
 
 function appHeaderHTML(title, right) {
@@ -1011,15 +1031,22 @@ function dashHTML() {
     ? lifted + logged
     : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts or a weigh-in in Weight, and your combined analytics appear here.</div></div>`;
 
+  const nudges = dueNudges();
+  const nudgeBanner = nudges.length
+    ? `<div class="nudge-card">${nudges.map(n => `<div class="n-row">${n.text}</div>`).join("")}</div>`
+    : "";
+
   return `<header>
       <h1>HEALTH<span class="bar">LOG</span></h1>
       <span class="tag">dashboard</span>
     </header>
     ${tiles}
+    ${nudgeBanner}
     <div class="section-title"><span>Apps</span></div>
     <div class="app-grid">${appCards}</div>
     <div class="section-title"><span>Across your apps</span></div>
     ${analytics}
+    ${remindersCardHTML()}
     <div class="section-title"><span>Your data</span></div>
     <div class="chart-card">
       <div class="wu-none">All app data is stored on this device and browser only. Copy a backup here, then import it in another browser — for example to move your history into the home-screen app.</div>
@@ -1209,6 +1236,93 @@ function deleteBwEntry(idx) {
   bw.splice(idx, 1);
   store.save("sl.bw", bw);
   render();
+}
+
+/* ================= reminders ================= */
+
+const reminders = () => store.load("sl.reminders", { workout: false, weighin: false, last: {} });
+
+const daysSince = iso => Math.floor((Date.now() - new Date(iso)) / 86400000);
+
+/* What's gently overdue right now, per the user's reminder settings */
+function dueNudges() {
+  const r = reminders();
+  const out = [];
+  if (r.workout) {
+    if (draft) {
+      out.push({ id: "workout", text: "You have a workout in progress — finish and save it" });
+    } else {
+      const all = sessions();
+      if (all.length) {
+        const d = daysSince(all[all.length - 1].startedAt);
+        if (d >= 3) out.push({ id: "workout", text: `Workout ${nextWorkoutType()} is waiting — last session ${d} days ago` });
+      }
+    }
+  }
+  if (r.weighin) {
+    const bw = bodyweights();
+    if (!bw.length || new Date(bw[bw.length - 1].date).toDateString() !== new Date().toDateString())
+      out.push({ id: "weighin", text: "No weigh-in logged today" });
+  }
+  return out;
+}
+
+async function toggleReminder(kind) {
+  const r = reminders();
+  r[kind] = !r[kind];
+  store.save("sl.reminders", r);
+  if (r[kind] && "Notification" in window && Notification.permission === "default") {
+    try { await Notification.requestPermission(); } catch { /* user dismissed */ }
+  }
+  render();
+}
+
+function updateBadge() {
+  try {
+    if (!navigator.setAppBadge) return;
+    const n = dueNudges().length;
+    if (n) navigator.setAppBadge(n); else navigator.clearAppBadge();
+  } catch { /* badging unsupported */ }
+}
+
+/* At most one silent notification per reminder per day */
+async function notifyNudges() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const r = reminders();
+  const today = new Date().toDateString();
+  r.last = r.last || {};
+  for (const n of dueNudges()) {
+    if (r.last[n.id] === today) continue;
+    r.last[n.id] = today;
+    store.save("sl.reminders", r);
+    try {
+      const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
+      const opts = { body: n.text, tag: "hl-" + n.id, silent: true, icon: "icon-192.png" };
+      if (reg) await reg.showNotification("HEALTH LOG", opts);
+      else new Notification("HEALTH LOG", opts);
+    } catch { /* notifications unavailable */ }
+  }
+}
+
+setInterval(() => { if (document.hidden) notifyNudges(); }, 15 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+
+function remindersCardHTML() {
+  const r = reminders();
+  const row = (kind, name, sub) => `<div class="tog-row" onclick="toggleReminder('${kind}')">
+    <span><span class="t-name">${name}</span><br><span class="t-sub">${sub}</span></span>
+    <span class="tog ${r[kind] ? "on" : ""}"></span>
+  </div>`;
+  const blocked = "Notification" in window && Notification.permission === "denied" && (r.workout || r.weighin);
+  const hint = blocked
+    ? "Notifications are blocked in your browser settings — you'll still get dashboard nudges and the app-icon badge."
+    : "Gentle by design: a nudge on this dashboard and an app-icon badge when something is due, plus at most one silent notification per reminder per day. No schedules, no nagging.";
+  return `<div class="section-title"><span>Reminders</span></div>
+  <div class="chart-card">
+    ${row("workout", "Workout reminder", "when it's been 3+ days since your last session")}
+    ${row("weighin", "Weigh-in reminder", "when no weight is logged today")}
+    <div class="wu-none" style="margin-top: 8px;">${hint}</div>
+  </div>`;
 }
 
 /* ================= actions ================= */
