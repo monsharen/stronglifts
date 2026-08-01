@@ -24,6 +24,7 @@
     --volt: #d8ff3e;
     --volt-ink: #161900;
     --fail: #ff5a48;
+    --warn: #ffb03e;
     --radius: 10px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -107,6 +108,43 @@
   }
   .tog.on { background: var(--volt); border-color: var(--volt); }
   .tog.on::after { left: 20px; background: var(--volt-ink); }
+
+  /* ---------- meals ---------- */
+  .cal-num { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 42px; line-height: 1; margin-top: 4px; }
+  .cal-num .cal-lbl { font-family: "IBM Plex Mono", monospace; font-weight: 400; font-size: 11px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-left: 8px; }
+  .cal-num.warn { color: var(--warn); }
+  .cal-num.over { color: var(--fail); }
+  .cal-bar { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; margin: 10px 0 14px; }
+  .cal-fill { height: 100%; background: var(--volt); transition: width .2s; }
+  .cal-fill.warn { background: var(--warn); }
+  .cal-fill.over { background: var(--fail); }
+  .meal-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .meal-btn {
+    min-height: 58px; border-radius: 8px; border: 2px solid var(--line); background: transparent;
+    color: var(--dim); cursor: pointer; padding: 8px;
+    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 19px; text-transform: uppercase; letter-spacing: .03em;
+    transition: background .1s, color .1s, border-color .1s;
+  }
+  .meal-btn .kc { display: block; font-family: "IBM Plex Mono", monospace; font-weight: 400; font-size: 10px; letter-spacing: .08em; margin-top: 2px; }
+  .meal-btn.on { background: var(--volt); border-color: var(--volt); color: var(--volt-ink); }
+  .meal-btn.on .kc { color: var(--volt-ink); }
+  .snack-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }
+  .snack-row .s-name { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 19px; text-transform: uppercase; }
+  .snack-btn {
+    flex: 0 0 58px; width: 58px; height: 58px; border-radius: 50%;
+    border: 2px solid var(--line); background: transparent; color: var(--dim);
+    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 22px; cursor: pointer;
+    transition: border-color .1s, color .1s;
+  }
+  .snack-btn.on { border-color: var(--volt); color: var(--volt); }
+  .cfg-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .cfg-item label { display: block; color: var(--dim); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 3px; }
+  .cfg-item input {
+    width: 100%; min-height: 40px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    color: var(--chalk); font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 18px; text-align: center;
+  }
+  .cfg-item input:focus { outline: 1px solid var(--volt); border-color: var(--volt); }
 
   /* ---------- dashboard ---------- */
   .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -474,13 +512,25 @@ const APPS = [
       return bw.length ? `Current ${fmtKg(bw[bw.length - 1].kg)}` : "Log your first weigh-in";
     },
   },
+  {
+    id: "meals",
+    name: "MEALS",
+    tagline: "Calorie slots",
+    route: "#/meals",
+    status() {
+      const day = mealDays()[todayKey()];
+      if (!day) return "Nothing logged today";
+      const left = mealsCfg().budget - dayKcal(day);
+      return left >= 0 ? `${left} kcal left today` : `${-left} kcal over today`;
+    },
+  },
 ];
 
 /* ================= app state / routing ================= */
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight"];
+const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight", "#/meals"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   return ROUTES.includes(h) ? h : "#/";
@@ -535,6 +585,7 @@ function render() {
     route === "#/stronglifts" ? (draft ? sessionHTML() : homeHTML())
     : route === "#/stronglifts/stats" ? statsHTML()
     : route === "#/weight" ? weightHTML()
+    : route === "#/meals" ? mealsHTML()
     : dashHTML();
   updateBadge();
 }
@@ -857,8 +908,11 @@ function chartSVG(pts, prIdx = -1, fmtLabel = w => w) {
   const line = pts.length > 1
     ? `<polyline points="${pts.map((p, i) => `${x(i)},${y(p.weight)}`).join(" ")}" fill="none" stroke="#d8ff3e" stroke-width="2" stroke-linejoin="round"/>`
     : "";
-  const dots = pts.map((p, i) =>
-    `<circle cx="${x(i)}" cy="${y(p.weight)}" r="3.5" fill="${p.ok ? "#d8ff3e" : "#101216"}" stroke="${p.ok ? "#d8ff3e" : "#ff5a48"}" stroke-width="2"/>`).join("");
+  const dots = pts.map((p, i) => {
+    const stroke = p.warn ? "#ffb03e" : p.ok ? "#d8ff3e" : "#ff5a48";
+    const fill = p.warn || !p.ok ? "#101216" : "#d8ff3e";
+    return `<circle cx="${x(i)}" cy="${y(p.weight)}" r="3.5" fill="${fill}" stroke="${stroke}" stroke-width="2"/>`;
+  }).join("");
 
   const pr = prIdx >= 0
     ? `<circle cx="${x(prIdx)}" cy="${y(pts[prIdx].weight)}" r="7.5" fill="none" stroke="#d8ff3e" stroke-width="1.5" stroke-dasharray="2 2"/>
@@ -1018,7 +1072,7 @@ function dashHTML() {
     ${volPts.length > 1 ? chartSVG(volPts, -1, w => fmtVolume(Math.round(w))) : ""}
   </div>` : "";
 
-  const bwPts = bw.map(b => ({ weight: b.kg, ok: true, date: b.date }));
+  const bwPts = bwSeries();
   const logged = bwPts.length ? `<div class="chart-card tap" onclick="navigate('#/weight')">
     <div class="chart-head">
       <h3>Weight logged</h3>
@@ -1027,9 +1081,18 @@ function dashHTML() {
     ${bwPts.length > 1 ? chartSVG(bwPts) : ""}
   </div>` : "";
 
-  const analytics = (lifted || logged)
-    ? lifted + logged
-    : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts or a weigh-in in Weight, and your combined analytics appear here.</div></div>`;
+  const mealPts = mealsSeries();
+  const calories = mealPts.length ? `<div class="chart-card tap" onclick="navigate('#/meals')">
+    <div class="chart-head">
+      <h3>Calories</h3>
+      <span class="cur">${mealPts[mealPts.length - 1].weight} kcal<span class="best">${mealPts.filter(p => p.ok).length} ⭐ win days</span></span>
+    </div>
+    ${mealPts.length > 1 ? chartSVG(mealPts) : ""}
+  </div>` : "";
+
+  const analytics = (lifted || logged || calories)
+    ? lifted + logged + calories
+    : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts, a weigh-in in Weight or a meal in Meals, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
   const nudgeBanner = nudges.length
@@ -1066,6 +1129,8 @@ async function exportData() {
     sessions: sessions(),
     bw: bodyweights(),
     height: heightCm(),
+    meals: mealDays(),
+    mealsCfg: store.load("sl.mealsCfg", null),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -1117,6 +1182,16 @@ async function importData() {
 
   if (typeof data.height === "number" && !heightCm()) store.save("sl.height", data.height);
 
+  if (data.meals && typeof data.meals === "object") {
+    const days = mealDays();
+    let added = 0;
+    for (const k of Object.keys(data.meals)) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && !days[k]) { days[k] = data.meals[k]; added++; }
+    }
+    if (added) store.save("sl.meals", days);
+  }
+  if (data.mealsCfg && !localStorage.getItem("sl.mealsCfg")) store.save("sl.mealsCfg", data.mealsCfg);
+
   render();
   alert(`Import complete: ${addedSessions} new session${addedSessions === 1 ? "" : "s"}, ${addedBw} new bodyweight entr${addedBw === 1 ? "y" : "ies"}.`);
 }
@@ -1154,6 +1229,26 @@ function bwChange(bw, days) {
 
 const fmtDelta = d => d === null ? "–" : d === 0 ? "±0" : (d > 0 ? "+" : "") + d;
 
+function dayKeyOf(dateLike) {
+  const d = new Date(dateLike);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+/* Bodyweight points, with weigh-ins up to two days after a Drinks day (from
+   the meals app) flagged warn — drinks make the scale wobble before it settles. */
+function bwSeries() {
+  const drinks = drinkDayKeys();
+  return bodyweights().map(b => {
+    let warn = false;
+    for (let off = 0; off <= 2 && !warn; off++) {
+      const d = new Date(b.date);
+      d.setDate(d.getDate() - off);
+      if (drinks.has(dayKeyOf(d))) warn = true;
+    }
+    return { weight: b.kg, ok: true, warn, date: b.date };
+  });
+}
+
 function weightHTML() {
   const bw = bodyweights();
   const h = heightCm();
@@ -1188,7 +1283,16 @@ function weightHTML() {
     <div class="tile"><div class="num">${fmtDelta(Math.round((cur - bw[0].kg) * 10) / 10)}</div><div class="lbl">All time</div></div>
   </div>`;
 
-  const pts = bw.map(b => ({ weight: b.kg, ok: true, date: b.date }));
+  const pts = bwSeries();
+  const drinks = drinkDayKeys();
+  const recentDrinks = [0, 1, 2].some(off => {
+    const d = new Date();
+    d.setDate(d.getDate() - off);
+    return drinks.has(dayKeyOf(d));
+  });
+  const notes = [];
+  if (pts.some(p => p.warn)) notes.push("Amber dots are weigh-ins within two days of a Drinks day in Meals — expect wobble there.");
+  if (recentDrinks) notes.push("Drinks were logged recently: the scale may swing up and down for a few days before it settles — trust the weekly trend, not today's number.");
   const chart = `<div class="chart-card">
       ${pts.length > 1
         ? chartSVG(pts) + `<div class="chart-dates">
@@ -1197,6 +1301,7 @@ function weightHTML() {
             <span>${fmtDate(pts[pts.length - 1].date)}</span>
           </div>`
         : `<div class="wu-none">Log a second weigh-in to see your trend.</div>`}
+      ${notes.length ? `<div class="wu-none" style="margin-top: 8px;">${notes.join(" ")}</div>` : ""}
       ${form}
     </div>`;
 
@@ -1236,6 +1341,154 @@ function deleteBwEntry(idx) {
   bw.splice(idx, 1);
   store.save("sl.bw", bw);
   render();
+}
+
+/* ================= meals app ================= */
+
+/* No exact calories — each slot carries a rough estimate. Days are keyed
+   "YYYY-MM-DD" (local); unlogged days simply don't exist, and that's fine. */
+const MEAL_SLOTS = [
+  { key: "b",  name: "Breakfast" },
+  { key: "l",  name: "Lunch" },
+  { key: "d",  name: "Dinner" },
+  { key: "dr", name: "Drinks" },
+];
+const SNACK_MAX = 5;
+
+const mealsCfg = () => store.load("sl.mealsCfg", { budget: 2500, b: 500, l: 700, d: 900, dr: 200, sn: 150 });
+const mealDays = () => store.load("sl.meals", {}); // { "YYYY-MM-DD": { b, l, d, dr, sn } }
+
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function dayKcal(day, cfg = mealsCfg()) {
+  return MEAL_SLOTS.reduce((sum, s) => sum + (day[s.key] ? cfg[s.key] : 0), 0) + (day.sn || 0) * cfg.sn;
+}
+
+/* Oldest → newest; ok = stayed within budget (a "win day") */
+function mealsSeries() {
+  const cfg = mealsCfg(), days = mealDays();
+  return Object.keys(days).sort().map(k => {
+    const kcal = dayKcal(days[k], cfg);
+    return { weight: kcal, ok: kcal <= cfg.budget, date: k };
+  });
+}
+
+function editMealDay(mutate) {
+  const days = mealDays(), t = todayKey();
+  const day = days[t] || {};
+  mutate(day);
+  if (Object.values(day).some(v => v)) days[t] = day;
+  else delete days[t]; // everything unticked again — day was never logged
+  store.save("sl.meals", days);
+  render();
+}
+
+function toggleMeal(key) { editMealDay(d => { d[key] = d[key] ? 0 : 1; }); }
+function tapSnack() { editMealDay(d => { d.sn = ((d.sn || 0) + 1) % (SNACK_MAX + 1); }); }
+
+function saveMealsCfg() {
+  const cfg = mealsCfg();
+  for (const [id, key] of [["cfg-budget", "budget"], ["cfg-b", "b"], ["cfg-l", "l"], ["cfg-d", "d"], ["cfg-dr", "dr"], ["cfg-sn", "sn"]]) {
+    const v = parseInt(document.getElementById(id).value, 10);
+    if (!isNaN(v) && v > 0) cfg[key] = v;
+  }
+  store.save("sl.mealsCfg", cfg);
+  render();
+}
+
+/* Day-keys with drinks logged — bodyweight wobbles for a few days after these */
+function drinkDayKeys() {
+  const days = mealDays();
+  return new Set(Object.keys(days).filter(k => days[k].dr));
+}
+
+function mealsHTML() {
+  const cfg = mealsCfg();
+  const days = mealDays();
+  const day = days[todayKey()] || {};
+  const kcal = dayKcal(day, cfg);
+  const left = cfg.budget - kcal;
+  const logged = Object.values(day).some(v => v);
+  const pct = Math.min(100, Math.round(kcal / cfg.budget * 100));
+  const level = kcal > cfg.budget ? "over" : kcal >= cfg.budget * 0.8 ? "warn" : "ok";
+
+  const slotBtns = MEAL_SLOTS.map(s => `<button class="meal-btn ${day[s.key] ? "on" : ""}" onclick="toggleMeal('${s.key}')">
+      ${s.name}<span class="kc">~${cfg[s.key]} kcal</span>
+    </button>`).join("");
+
+  let statusLine;
+  if (!logged) statusLine = "Nothing ticked yet — skipping breakfast already puts you ahead.";
+  else if (left < 0) statusLine = `Over budget by ${-left} kcal — tomorrow is a fresh day.`;
+  else if (level === "warn") statusLine = `Getting close — ${left} kcal left. A light dinner keeps the ⭐.`;
+  else if (!day.b) statusLine = `⭐ On track for a win day — breakfast skipped leaves room for dinner.`;
+  else statusLine = `⭐ On track for a win day.`;
+
+  const series = mealsSeries();
+  const wins = series.filter(p => p.ok).length;
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num ${level === "over" ? "nok" : ""}">${left >= 0 ? left : "+" + -left}</div><div class="lbl">kcal ${left >= 0 ? "left today" : "over today"}</div></div>
+    <div class="tile"><div class="num">${wins} ⭐</div><div class="lbl">Win days</div></div>
+    <div class="tile"><div class="num">${series.length}</div><div class="lbl">Days logged</div></div>
+  </div>`;
+
+  const chart = series.length > 1 ? `<div class="section-title"><span>Calories per logged day</span></div>
+    <div class="chart-card">
+      ${chartSVG(series)}
+      <div class="chart-dates">
+        <span>${fmtDate(series[0].date)}</span>
+        <span>green ⭐ under · red over budget</span>
+        <span>${fmtDate(series[series.length - 1].date)}</span>
+      </div>
+    </div>` : "";
+
+  const histRows = Object.keys(days).sort().reverse().slice(0, 14).map(k => {
+    const d = days[k], dk = dayKcal(d, cfg), win = dk <= cfg.budget;
+    const parts = MEAL_SLOTS.filter(s => d[s.key]).map(s => s.name === "Drinks" ? "Drinks" : s.name[0]);
+    if (d.sn) parts.push("S×" + d.sn);
+    return `<div class="hist-row">
+      <span>${fmtDate(k)}</span>
+      <span class="reps">${parts.join(" · ")} — ${dk} kcal <span class="${win ? "ok" : "nok"}">${win ? "⭐" : "✗"}</span></span>
+    </div>`;
+  }).join("");
+  const hist = histRows ? `<div class="section-title"><span>Logged days</span><span>${series.length} total</span></div>
+    <div class="hist-card">${histRows}</div>` : "";
+
+  const cfgCard = `<div class="section-title"><span>Slot estimates</span></div>
+    <div class="chart-card">
+      <div class="wu-none">Rough estimates per slot — no food diaries here. Missing a day is fine; only logged days count.</div>
+      <div class="cfg-grid">
+        <div class="cfg-item"><label>Budget</label><input inputmode="numeric" id="cfg-budget" value="${cfg.budget}"></div>
+        <div class="cfg-item"><label>Breakfast</label><input inputmode="numeric" id="cfg-b" value="${cfg.b}"></div>
+        <div class="cfg-item"><label>Lunch</label><input inputmode="numeric" id="cfg-l" value="${cfg.l}"></div>
+        <div class="cfg-item"><label>Dinner</label><input inputmode="numeric" id="cfg-d" value="${cfg.d}"></div>
+        <div class="cfg-item"><label>Drinks</label><input inputmode="numeric" id="cfg-dr" value="${cfg.dr}"></div>
+        <div class="cfg-item"><label>Snack</label><input inputmode="numeric" id="cfg-sn" value="${cfg.sn}"></div>
+      </div>
+      <div class="data-actions"><button onclick="saveMealsCfg()">Save estimates</button></div>
+    </div>`;
+
+  return `${appHeaderHTML("MEALS", `<span class="tag">calorie slots</span>`)}
+    ${tiles}
+    <div class="chart-card">
+      <div class="chart-head">
+        <h3>Today</h3>
+        <span class="cur">${kcal} / ${cfg.budget} kcal</span>
+      </div>
+      <div class="cal-num ${level}">${Math.abs(left)}<span class="cal-lbl">kcal ${left >= 0 ? "left" : "over"}</span></div>
+      <div class="cal-bar"><div class="cal-fill ${level}" style="width: ${pct}%"></div></div>
+      <div class="meal-slots">${slotBtns}</div>
+      <div class="snack-row">
+        <span class="s-name">Snacks<span class="scheme" style="margin-left:8px;">~${cfg.sn} kcal each</span></span>
+        <button class="snack-btn ${day.sn ? "on" : ""}" onclick="tapSnack()">${day.sn || 0}</button>
+      </div>
+      <div class="wu-none" style="margin-top: 12px;">${statusLine}</div>
+    </div>
+    ${chart}
+    ${hist}
+    ${cfgCard}`;
 }
 
 /* ================= reminders ================= */
