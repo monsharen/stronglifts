@@ -122,6 +122,7 @@
   }
   .pr-card .pr-title { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; color: var(--volt); text-transform: uppercase; }
   .pr-card .pr-lifts { font-size: 13px; margin-top: 4px; }
+  .medal-shelf { font-size: 15px; letter-spacing: .15em; }
 
   /* ---------- meals ---------- */
   .cal-num { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 42px; line-height: 1; margin-top: 4px; }
@@ -1170,6 +1171,7 @@ function dashHTML() {
     </header>
     ${tiles}
     ${nudgeBanner}
+    ${progressCardHTML()}
     <div class="section-title"><span>Apps</span></div>
     <div class="app-grid">${appCards}</div>
     <div class="section-title"><span>Across your apps</span></div>
@@ -1566,6 +1568,97 @@ function mealsHTML() {
     ${chart}
     ${hist}
     ${cfgCard}`;
+}
+
+/* ================= progress: XP, levels, weekly medals =================
+   XP is derived from logged data, never stored — history back-fills itself. */
+
+const XP = { weighin: 5, workout: 20, win: 15, combo: 10 };
+
+const parseDayKey = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
+
+function xpBreakdown() {
+  const cfg = mealsCfg(), days = mealDays();
+  const winKeys = Object.keys(days).filter(k => dayKcal(days[k], cfg) <= cfg.budget);
+  const workoutDays = new Set(sessions().map(s => dayKeyOf(s.startedAt)));
+  const weighinDays = new Set(bodyweights().map(b => dayKeyOf(b.date)));
+  const combos = winKeys.filter(k => workoutDays.has(k) && weighinDays.has(k)).length;
+  return { weighins: bodyweights().length, workouts: sessions().length, wins: winKeys.length, combos };
+}
+
+function totalXP() {
+  const b = xpBreakdown();
+  return b.weighins * XP.weighin + b.workouts * XP.workout + b.wins * XP.win + b.combos * XP.combo;
+}
+
+const LEVELS = [
+  { xp: 0, title: "Empty Bar" }, { xp: 60, title: "Plate Loader" }, { xp: 150, title: "5×5 Apprentice" },
+  { xp: 300, title: "Iron Novice" }, { xp: 500, title: "Barbell Regular" }, { xp: 750, title: "Plate Club" },
+  { xp: 1050, title: "Volume Merchant" }, { xp: 1400, title: "Deload Survivor" }, { xp: 1800, title: "Iron Viking" },
+  { xp: 2300, title: "Stronglifter" }, { xp: 2900, title: "Tonnage Tycoon" }, { xp: 3600, title: "Iron Legend" },
+];
+
+function levelInfo() {
+  const xp = totalXP();
+  let i = 0;
+  while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1].xp) i++;
+  const next = LEVELS[i + 1] || null;
+  return { n: i + 1, title: LEVELS[i].title, xp, cur: LEVELS[i].xp, next: next && next.xp };
+}
+
+/* Monday day-key of the week a date falls in */
+function weekKeyOf(dateLike) {
+  const d = new Date(dateLike);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return dayKeyOf(d);
+}
+
+function weeklyPoints() {
+  const pts = {};
+  const add = (k, v) => { pts[k] = (pts[k] || 0) + v; };
+  for (const s of sessions()) add(weekKeyOf(s.startedAt), XP.workout);
+  for (const b of bodyweights()) add(weekKeyOf(b.date), XP.weighin);
+  const cfg = mealsCfg(), days = mealDays();
+  for (const k of Object.keys(days))
+    if (dayKcal(days[k], cfg) <= cfg.budget) add(weekKeyOf(parseDayKey(k)), XP.win);
+  return pts;
+}
+
+const MEDALS = [{ pts: 100, icon: "🥇" }, { pts: 60, icon: "🥈" }, { pts: 30, icon: "🥉" }];
+const medalFor = p => (MEDALS.find(m => p >= m.pts) || {}).icon || null;
+
+function progressCardHTML() {
+  const lv = levelInfo();
+  const span = lv.next ? lv.next - lv.cur : 1;
+  const pct = lv.next ? Math.min(100, Math.round((lv.xp - lv.cur) / span * 100)) : 100;
+  const weeks = weeklyPoints();
+  const thisWeek = weeks[weekKeyOf(new Date())] || 0;
+  const medal = medalFor(thisWeek);
+  const nextMedal = MEDALS.slice().reverse().find(m => thisWeek < m.pts);
+  const weekLine = medal
+    ? `${medal} week secured — ${thisWeek} pts${nextMedal ? ` · ${nextMedal.pts - thisWeek} to ${nextMedal.icon}` : " · max medal!"}`
+    : `${thisWeek} pts this week — ${nextMedal.pts - thisWeek} more for 🥉`;
+
+  // Medal shelf: the last 8 finished weeks, oldest first
+  const shelf = [];
+  for (let i = 8; i >= 1; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - 7 * i);
+    shelf.push(medalFor(weeks[weekKeyOf(d)] || 0) || "·");
+  }
+
+  return `<div class="section-title"><span>Progress</span></div>
+  <div class="chart-card">
+    <div class="chart-head">
+      <h3>LVL ${lv.n} · ${lv.title}</h3>
+      <span class="cur">${lv.xp} XP<span class="best">${lv.next ? lv.next - lv.xp + " to next" : "max level"}</span></span>
+    </div>
+    <div class="cal-bar"><div class="cal-fill" style="width: ${pct}%"></div></div>
+    <div class="wu-none">${weekLine}</div>
+    <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
+    <div class="wu-none" style="margin-top: 6px;">Workout +${XP.workout} · win day +${XP.win} · weigh-in +${XP.weighin} · all three in one day +${XP.combo}</div>
+  </div>`;
 }
 
 /* ================= reminders ================= */
