@@ -218,6 +218,7 @@
     font-size: 11px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
   }
   .data-actions button:active { background: var(--line); }
+  .data-actions button.active { border-color: var(--volt); color: var(--volt); }
 
   /* ---------- home: next workout card ---------- */
   .next-card {
@@ -1327,6 +1328,129 @@ function bwSeries() {
   });
 }
 
+/* ---------- ghost race: current loss curve vs past regime runs ---------- */
+
+/* Real historical regime runs: [date, kg], first row is day 0 */
+const GHOSTS = {
+  "2022": { label: "2022 · the 10 kg run", w: [
+    ["2022-08-15", 96.00], ["2022-09-03", 92.80], ["2022-09-04", 92.80], ["2022-09-05", 93.50], ["2022-09-09", 92.70],
+    ["2022-09-11", 92.70], ["2022-10-03", 91.05], ["2022-10-10", 91.50], ["2022-10-11", 90.60], ["2022-10-12", 89.90],
+    ["2022-10-13", 89.40], ["2022-10-14", 89.40], ["2022-10-15", 89.15], ["2022-10-16", 89.65], ["2022-10-17", 90.25],
+    ["2022-10-18", 89.15], ["2022-10-19", 89.30], ["2022-10-20", 89.30], ["2022-10-21", 89.00], ["2022-10-22", 89.00],
+    ["2022-10-23", 89.30], ["2022-10-26", 88.60], ["2022-10-27", 88.30], ["2022-10-28", 87.75], ["2022-10-29", 87.60],
+    ["2022-10-30", 88.15], ["2022-10-31", 89.20], ["2022-11-01", 88.50], ["2022-11-02", 87.90], ["2022-11-03", 87.95],
+    ["2022-11-04", 87.55], ["2022-11-05", 87.25], ["2022-11-10", 88.65], ["2022-11-11", 87.85], ["2022-11-12", 86.90],
+    ["2022-11-13", 87.85], ["2022-11-15", 88.10], ["2022-11-17", 87.55], ["2022-11-18", 86.90], ["2022-11-19", 87.55],
+    ["2022-11-22", 86.90], ["2022-11-23", 88.20], ["2022-11-24", 87.25], ["2022-11-26", 87.00], ["2022-12-06", 87.00],
+    ["2022-12-07", 86.50], ["2022-12-08", 86.45],
+  ]},
+  "2024": { label: "2024 · 0.5 kg/week", w: [
+    ["2024-03-11", 87.50], ["2024-03-18", 87.25], ["2024-03-25", 86.50], ["2024-04-01", 86.00],
+    ["2024-04-08", 85.50], ["2024-04-15", 85.00], ["2024-04-22", 84.50], ["2024-04-29", 84.00],
+  ]},
+  "2025": { label: "2025 · short run", w: [
+    ["2025-06-10", 93.00], ["2025-06-23", 92.00], ["2025-06-25", 91.35],
+  ]},
+};
+
+const ghostChoice = () => store.load("sl.ghost", "2022");
+function pickGhost(k) { store.save("sl.ghost", k); render(); }
+
+function ghostSeries(g) {
+  const t0 = parseDayKey(g.w[0][0]).getTime();
+  const kg0 = g.w[0][1];
+  return g.w.map(([d, kg]) => ({
+    day: Math.round((parseDayKey(d).getTime() - t0) / 86400000),
+    loss: Math.round((kg0 - kg) * 100) / 100,
+  }));
+}
+
+/* Your current run: day 0 = first logged weigh-in */
+function raceCurSeries() {
+  const bw = bodyweights();
+  if (bw.length < 2) return [];
+  const t0 = new Date(bw[0].date).getTime();
+  return bw.map(b => ({
+    day: Math.max(0, Math.round((new Date(b.date).getTime() - t0) / 86400000)),
+    loss: Math.round((bw[0].kg - b.kg) * 100) / 100,
+  }));
+}
+
+function ghostLossAt(ghost, day) {
+  if (day <= 0) return 0;
+  if (day >= ghost[ghost.length - 1].day) return null; // beyond the ghost's run
+  let prev = ghost[0];
+  for (const p of ghost) {
+    if (p.day >= day) {
+      const span = p.day - prev.day || 1;
+      return prev.loss + (p.loss - prev.loss) * ((day - prev.day) / span);
+    }
+    prev = p;
+  }
+  return null;
+}
+
+function raceSVG(cur, ghost) {
+  const W = 320, H = 140, P = { l: 36, r: 10, t: 10, b: 18 };
+  const maxDay = Math.max(ghost[ghost.length - 1].day, cur.length ? cur[cur.length - 1].day : 0, 7);
+  const losses = [...ghost.map(p => p.loss), ...cur.map(p => p.loss)];
+  const top = Math.max(...losses, 1);
+  const maxLoss = top * 1.08;
+  const minLoss = Math.min(0, ...losses);
+  const x = d => P.l + (W - P.l - P.r) * (d / maxDay);
+  const y = l => P.t + (H - P.t - P.b) * (1 - (l - minLoss) / (maxLoss - minLoss));
+  const line = (pts, attrs) => `<polyline points="${pts.map(p => `${x(p.day).toFixed(1)},${y(p.loss).toFixed(1)}`).join(" ")}" fill="none" ${attrs}/>`;
+  const paceEnd = Math.min(maxDay, maxLoss / 0.1);
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">
+    <line x1="${P.l}" y1="${y(0)}" x2="${W - P.r}" y2="${y(0)}" stroke="#2b303a" stroke-width="1"/>
+    <text x="${P.l - 5}" y="${y(top) + 3}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">−${top.toFixed(1)}</text>
+    <text x="${P.l - 5}" y="${y(0) + 3}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">0</text>
+    <text x="${W - P.r}" y="${H - 4}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">day ${maxDay}</text>
+    <polyline points="${x(0)},${y(0)} ${x(paceEnd).toFixed(1)},${y(paceEnd * 0.1).toFixed(1)}" fill="none" stroke="#ffb03e" stroke-width="1" stroke-dasharray="2 4"/>
+    ${line(ghost, 'stroke="#8b8f99" stroke-width="1.5" stroke-dasharray="5 4"')}
+    ${cur.length ? line(cur, 'stroke="#d8ff3e" stroke-width="2" stroke-linejoin="round"') : ""}
+  </svg>`;
+}
+
+function raceCardHTML() {
+  const key = GHOSTS[ghostChoice()] ? ghostChoice() : "2022";
+  const g = GHOSTS[key];
+  const gpts = ghostSeries(g);
+  const cur = raceCurSeries();
+  const gLast = gpts[gpts.length - 1];
+
+  let status;
+  if (!cur.length) {
+    status = "Log at least two weigh-ins and your curve races the ghost from day 0.";
+  } else {
+    const you = cur[cur.length - 1];
+    const gl = ghostLossAt(gpts, you.day);
+    if (gl === null) {
+      status = `The ${key} ghost finished at −${gLast.loss} kg on day ${gLast.day}; you're on day ${you.day} at −${you.loss} kg. The track is yours now.`;
+    } else {
+      const diff = Math.round((you.loss - gl) * 10) / 10;
+      status = diff >= 0
+        ? `Day ${you.day}: you're ${diff} kg ahead of ${key}-you 👻 — keep it up.`
+        : `Day ${you.day}: ${-diff} kg behind ${key}-you 👻 — the ghost averaged ${(gLast.loss / (gLast.day / 7)).toFixed(1)} kg/week.`;
+    }
+  }
+
+  const picker = Object.keys(GHOSTS).map(k =>
+    `<button class="${k === key ? "active" : ""}" onclick="pickGhost('${k}')">${k}</button>`).join("");
+
+  return `<div class="section-title"><span>Ghost race · vs ${g.label}</span></div>
+    <div class="chart-card">
+      ${raceSVG(cur, gpts)}
+      <div class="chart-dates">
+        <span style="color:#d8ff3e;">— you</span>
+        <span>┅ ghost</span>
+        <span style="color:#ffb03e;">┄ 0.7 kg/w pace</span>
+      </div>
+      <div class="wu-none" style="margin-top: 8px;">${status} Day 0 is each run's first weigh-in; the y-axis is kg lost since then.</div>
+      <div class="data-actions">${picker}</div>
+    </div>`;
+}
+
 function weightHTML() {
   const bw = bodyweights();
   const h = heightCm();
@@ -1394,6 +1518,7 @@ function weightHTML() {
   return `${header}
     ${tiles}
     ${chart}
+    ${raceCardHTML()}
     <div class="section-title"><span>Entries</span><span>${bw.length} total${bw.length > 14 ? " · showing last 14" : ""}</span></div>
     <div class="hist-card">${rows}</div>
     ${profile}`;
