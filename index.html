@@ -1173,9 +1173,12 @@ function dashHTML() {
     : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts, a weigh-in in Weight or a meal in Meals, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
-  const nudgeBanner = nudges.length
-    ? `<div class="nudge-card">${nudges.map(n => `<div class="n-row">${n.text}</div>`).join("")}</div>`
-    : "";
+  const nudgeBanner = (isBonusDay(todayKey())
+      ? `<div class="nudge-card"><div class="n-row">🎰 Mystery ×2 day — a win day today is worth double XP</div></div>`
+      : "")
+    + (nudges.length
+      ? `<div class="nudge-card">${nudges.map(n => `<div class="n-row">${n.text}</div>`).join("")}</div>`
+      : "");
 
   return `<header>
       <h1>HEALTH<span class="bar">LOG</span></h1>
@@ -1210,6 +1213,7 @@ async function exportData() {
     height: heightCm(),
     meals: mealDays(),
     mealsCfg: store.load("sl.mealsCfg", null),
+    chests: store.load("sl.chests", null),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -1270,6 +1274,7 @@ async function importData() {
     if (added) store.save("sl.meals", days);
   }
   if (data.mealsCfg && !localStorage.getItem("sl.mealsCfg")) store.save("sl.mealsCfg", data.mealsCfg);
+  if (data.chests && !localStorage.getItem("sl.chests")) store.save("sl.chests", data.chests);
 
   render();
   alert(`Import complete: ${addedSessions} new session${addedSessions === 1 ? "" : "s"}, ${addedBw} new bodyweight entr${addedBw === 1 ? "y" : "ies"}.`);
@@ -1687,6 +1692,7 @@ function mealsHTML() {
 
   return `${appHeaderHTML("MEALS", `<span class="tag">calorie slots</span>`)}
     ${tiles}
+    ${isBonusDay(todayKey()) ? `<div class="nudge-card"><div class="n-row">🎰 Mystery ×2 day — today's ⭐ is worth double XP</div></div>` : ""}
     <div class="chart-card">
       <div class="chart-head">
         <h3>Today</h3>
@@ -1713,18 +1719,52 @@ const XP = { weighin: 5, workout: 20, win: 15, combo: 10 };
 
 const parseDayKey = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
 
+/* Mystery ×2 days: deterministic date hash, ~1 day in 8. Deterministic so
+   history scores consistently and a reload can't reroll today. */
+function hashStr(s) {
+  let h = 0;
+  for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return Math.abs(h);
+}
+const isBonusDay = k => hashStr("hl" + k) % 8 === 0;
+
 function xpBreakdown() {
   const cfg = mealsCfg(), days = mealDays();
   const winKeys = Object.keys(days).filter(k => dayKcal(days[k], cfg) <= cfg.budget);
   const workoutDays = new Set(sessions().map(s => dayKeyOf(s.startedAt)));
   const weighinDays = new Set(bodyweights().map(b => dayKeyOf(b.date)));
   const combos = winKeys.filter(k => workoutDays.has(k) && weighinDays.has(k)).length;
-  return { weighins: bodyweights().length, workouts: sessions().length, wins: winKeys.length, combos };
+  const bonusWins = winKeys.filter(isBonusDay).length;
+  return { weighins: bodyweights().length, workouts: sessions().length, wins: winKeys.length, combos, bonusWins };
+}
+
+/* ---------- win chests: every 5 win days fills one ---------- */
+
+const chestState = () => store.load("sl.chests", { opened: 0, rewards: [] });
+const chestXP = () => chestState().rewards.reduce((s, r) => s + r.xp, 0);
+const chestsReady = () => Math.floor(xpBreakdown().wins / 5) - chestState().opened;
+
+function openChest() {
+  const chests = chestState();
+  if (Math.floor(xpBreakdown().wins / 5) <= chests.opened) return;
+  const xs = [25, 25, 25, 50, 50, 100];
+  const trophies = ["🏆", "🎖️", "🍾", "💎", "👑", "🦄", "🔥", "🚀", "🥂", "🧨"];
+  chests.opened++;
+  chests.rewards.push({
+    xp: xs[Math.floor(Math.random() * xs.length)],
+    trophy: trophies[Math.floor(Math.random() * trophies.length)],
+    at: new Date().toISOString(),
+  });
+  store.save("sl.chests", chests);
+  celebrate(true);
+  render();
 }
 
 function totalXP() {
   const b = xpBreakdown();
-  return b.weighins * XP.weighin + b.workouts * XP.workout + b.wins * XP.win + b.combos * XP.combo;
+  return b.weighins * XP.weighin + b.workouts * XP.workout + b.wins * XP.win
+    + b.bonusWins * XP.win /* mystery-day wins count double */
+    + b.combos * XP.combo + chestXP();
 }
 
 const LEVELS = [
@@ -1794,6 +1834,12 @@ function progressCardHTML() {
     <div class="wu-none">${weekLine}</div>
     <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
     <div class="wu-none" style="margin-top: 6px;">Workout +${XP.workout} · win day +${XP.win} · weigh-in +${XP.weighin} · all three in one day +${XP.combo}</div>
+    ${chestsReady() > 0
+      ? `<button class="btn btn-volt" style="font-size: 18px; padding: 12px;" onclick="openChest()">🎁 Open win chest${chestsReady() > 1 ? ` (${chestsReady()} ready)` : ""}</button>`
+      : `<div class="wu-none" style="margin-top: 6px;">🎁 Next win chest at ${(Math.floor(xpBreakdown().wins / 5) + 1) * 5} win days — you have ${xpBreakdown().wins}.</div>`}
+    ${chestState().rewards.length
+      ? `<div class="wu-none" style="margin-top: 6px;">Chest loot: <span class="medal-shelf">${chestState().rewards.map(r => r.trophy).join(" ")}</span> (+${chestXP()} XP)</div>`
+      : ""}
     <div class="tog-row" onclick="navigate('#/awards')" style="margin-top: 8px;">
       <span class="t-name">🏆 Awards</span>
       <span class="t-sub">${ACHIEVEMENTS.filter(a => a.test(achCtx())).length} / ${ACHIEVEMENTS.length} unlocked →</span>
