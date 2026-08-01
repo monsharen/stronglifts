@@ -109,6 +109,20 @@
   .tog.on { background: var(--volt); border-color: var(--volt); }
   .tog.on::after { left: 20px; background: var(--volt-ink); }
 
+  /* ---------- celebrations ---------- */
+  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 99; overflow: hidden; }
+  .confetti i { position: absolute; top: -14px; width: 7px; height: 11px; opacity: .95; animation: conf-fall linear forwards; }
+  @keyframes conf-fall { to { transform: translateY(105vh) rotate(720deg); opacity: .6; } }
+  .meal-btn.on, .set-btn.done, .wu-set.checked .wu-btn, .snack-btn.on { animation: pop .18s ease-out; }
+  @keyframes pop { 40% { transform: scale(1.12); } }
+  .pr-card {
+    background: var(--panel); border: 1px solid var(--volt); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 12px; text-align: center;
+    box-shadow: 0 0 24px rgba(216,255,62,.12);
+  }
+  .pr-card .pr-title { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; color: var(--volt); text-transform: uppercase; }
+  .pr-card .pr-lifts { font-size: 13px; margin-top: 4px; }
+
   /* ---------- meals ---------- */
   .cal-num { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 42px; line-height: 1; margin-top: 4px; }
   .cal-num .cal-lbl { font-family: "IBM Plex Mono", monospace; font-weight: 400; font-size: 11px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-left: 8px; }
@@ -647,7 +661,16 @@ function homeHTML() {
       }).join("")
     : `<div class="empty">No sessions yet. Lift something heavy.</div>`;
 
+  const pr = prBanner
+    ? `<div class="pr-card">
+        <div class="pr-title">🎆 New PR</div>
+        <div class="pr-lifts">${prBanner.join(" · ")}</div>
+      </div>`
+    : "";
+  prBanner = null;
+
   return `${slHeaderHTML()}
+    ${pr}
     <div class="next-card" data-letter="${type}">
       <div class="kicker">Next up</div>
       <h2>Workout <span class="letter">${type}</span></h2>
@@ -808,6 +831,48 @@ function beep() {
     osc.start(t0 + dt);
     osc.stop(t0 + dt + 0.2);
   });
+}
+
+/* ================= celebrations ================= */
+
+function chime(kind) { // "tick" | "win" | "fanfare"
+  if (!audioCtx || audioCtx.state !== "running") return;
+  const notes = kind === "fanfare" ? [523, 659, 784, 1047] : kind === "win" ? [659, 988] : [880];
+  const t0 = audioCtx.currentTime;
+  notes.forEach((f, i) => {
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = f;
+    const t = t0 + i * 0.11;
+    gain.gain.setValueAtTime(kind === "tick" ? 0.05 : 0.1, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.3);
+  });
+}
+
+function confetti(n) {
+  const colors = ["#d8ff3e", "#ffb03e", "#e8e6df", "#ff5a48", "#7ec8ff"];
+  const wrap = document.createElement("div");
+  wrap.className = "confetti";
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("i");
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.background = colors[Math.floor(Math.random() * colors.length)];
+    p.style.animationDelay = Math.random() * 0.5 + "s";
+    p.style.animationDuration = 1.2 + Math.random() * 1.2 + "s";
+    wrap.appendChild(p);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(() => wrap.remove(), 3200);
+}
+
+function celebrate(big) {
+  armAudio();
+  confetti(big ? 90 : 35);
+  chime(big ? "fanfare" : "win");
+  if (navigator.vibrate) navigator.vibrate(big ? [60, 40, 60] : 30);
 }
 
 function startRest() {
@@ -1332,6 +1397,9 @@ function logBodyweight() {
   if (bw.length && sameDay(bw[bw.length - 1].date, now)) bw[bw.length - 1] = entry;
   else bw.push(entry);
   store.save("sl.bw", bw);
+  armAudio();
+  chime("tick");
+  if (navigator.vibrate) navigator.vibrate(15);
   render();
 }
 
@@ -1382,11 +1450,16 @@ function mealsSeries() {
 function editMealDay(mutate) {
   const days = mealDays(), t = todayKey();
   const day = days[t] || {};
+  const cfg = mealsCfg();
+  const wasSecured = !!day.d && dayKcal(day, cfg) <= cfg.budget;
   mutate(day);
   if (Object.values(day).some(v => v)) days[t] = day;
   else delete days[t]; // everything unticked again — day was never logged
   store.save("sl.meals", days);
   render();
+  // Dinner ticked with budget intact = the day's star is secured; occasionally jackpot-sized
+  const secured = !!day.d && dayKcal(day, cfg) <= cfg.budget;
+  if (secured && !wasSecured) celebrate(Math.random() < 1 / 8);
 }
 
 function toggleMeal(key) { editMealDay(d => { d[key] = d[key] ? 0 : 1; }); }
@@ -1614,6 +1687,7 @@ function tapSet(ei, si) {
   } else {
     armAudio();
     draft.rest = { start: Date.now(), guide: restGuide() };
+    if (e.setReps[si] === target) { chime("tick"); if (navigator.vibrate) navigator.vibrate(15); }
   }
   saveDraft();
   render();
@@ -1633,6 +1707,19 @@ function setWeight(ei, val) {
   render();
 }
 
+/* Lifts in this session that beat every previously completed weight */
+function sessionPRs(sess) {
+  const prevBest = {};
+  for (const s of sessions())
+    for (const e of s.entries)
+      if (isSuccess(e)) prevBest[e.ex] = Math.max(prevBest[e.ex] || 0, e.weight);
+  return sess.entries
+    .filter(e => isSuccess(e) && e.weight > (prevBest[e.ex] || 0))
+    .map(e => `${EXERCISES[e.ex].name} ${fmtKg(e.weight)}`);
+}
+
+let prBanner = null; // shown once on the next home render
+
 function finishSession() {
   const untouched = draft.entries.every(e => e.setReps.every(r => r === null));
   if (untouched && !confirm("No sets logged. Save anyway?")) return;
@@ -1640,10 +1727,12 @@ function finishSession() {
   // Unlogged sets count as 0 reps (not done)
   draft.entries.forEach(e => { e.setReps = e.setReps.map(r => r === null ? 0 : r); });
   draft.finishedAt = new Date().toISOString();
+  const prs = sessionPRs(draft);
   all.push(draft);
   store.save("sl.sessions", all);
   store.drop("sl.draft");
   draft = null;
+  if (prs.length) { prBanner = prs; celebrate(true); }
   navigate("#/stronglifts");
 }
 
