@@ -123,6 +123,16 @@
   .pr-card .pr-title { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 26px; color: var(--volt); text-transform: uppercase; }
   .pr-card .pr-lifts { font-size: 13px; margin-top: 4px; }
   .medal-shelf { font-size: 15px; letter-spacing: .15em; }
+  .ach-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .ach {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 8px; text-align: center;
+    opacity: .38; filter: grayscale(1);
+  }
+  .ach.got { opacity: 1; filter: none; border-color: rgba(216,255,62,.4); }
+  .ach .a-icon { font-size: 26px; line-height: 1.3; }
+  .ach .a-name { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 14px; text-transform: uppercase; margin-top: 2px; }
+  .ach .a-desc { color: var(--dim); font-size: 9px; margin-top: 2px; line-height: 1.35; }
 
   /* ---------- meals ---------- */
   .cal-num { font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 42px; line-height: 1; margin-top: 4px; }
@@ -545,7 +555,7 @@ const APPS = [
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight", "#/meals"];
+const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight", "#/meals", "#/awards"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   return ROUTES.includes(h) ? h : "#/";
@@ -601,6 +611,7 @@ function render() {
     : route === "#/stronglifts/stats" ? statsHTML()
     : route === "#/weight" ? weightHTML()
     : route === "#/meals" ? mealsHTML()
+    : route === "#/awards" ? awardsHTML()
     : dashHTML();
   updateBadge();
 }
@@ -1658,7 +1669,87 @@ function progressCardHTML() {
     <div class="wu-none">${weekLine}</div>
     <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
     <div class="wu-none" style="margin-top: 6px;">Workout +${XP.workout} · win day +${XP.win} · weigh-in +${XP.weighin} · all three in one day +${XP.combo}</div>
+    <div class="tog-row" onclick="navigate('#/awards')" style="margin-top: 8px;">
+      <span class="t-name">🏆 Awards</span>
+      <span class="t-sub">${ACHIEVEMENTS.filter(a => a.test(achCtx())).length} / ${ACHIEVEMENTS.length} unlocked →</span>
+    </div>
   </div>`;
+}
+
+/* ================= awards ================= */
+
+/* All achievements are derived from logged data — nothing to store, nothing to lose. */
+function achCtx() {
+  const best = {};
+  let vol = 0;
+  const all = sessions();
+  for (const s of all)
+    for (const e of s.entries) {
+      for (const r of e.setReps) vol += r * e.weight;
+      if (isSuccess(e)) best[e.ex] = Math.max(best[e.ex] || 0, e.weight);
+    }
+  const cfg = mealsCfg(), days = mealDays();
+  const keys = Object.keys(days).sort();
+  let wins = 0, fikaWins = 0, bounce = 0, prevOver = false;
+  const weekWins = {};
+  for (const k of keys) {
+    const win = dayKcal(days[k], cfg) <= cfg.budget;
+    if (win) {
+      wins++;
+      if (days[k].f) fikaWins++;
+      if (prevOver) bounce++;
+      const wk = weekKeyOf(parseDayKey(k));
+      weekWins[wk] = (weekWins[wk] || 0) + 1;
+    }
+    prevOver = !win;
+  }
+  const golds = Object.values(weeklyPoints()).filter(p => p >= 100).length;
+  return {
+    best, vol, sessions: all.length, wins, weighins: bodyweights().length,
+    fikaWins, bounce, golds, bestWeekWins: Math.max(0, ...Object.values(weekWins)),
+  };
+}
+
+const liftClub = (ex, kg) => ({ icon: "🏋️", name: `${EXERCISES[ex].name} ${kg} kg`, desc: `Complete 5×5 at ${kg} kg`, test: c => (c.best[ex] || 0) >= kg });
+const ACHIEVEMENTS = [
+  { icon: "🎬", name: "First blood", desc: "Log your first workout", test: c => c.sessions >= 1 },
+  { icon: "📅", name: "Ten sessions", desc: "Log 10 workouts", test: c => c.sessions >= 10 },
+  { icon: "🗓", name: "Quarter century", desc: "Log 25 workouts", test: c => c.sessions >= 25 },
+  { icon: "💯", name: "Centurion", desc: "Log 100 workouts", test: c => c.sessions >= 100 },
+  liftClub("squat", 60), liftClub("squat", 80), liftClub("squat", 100), liftClub("squat", 120),
+  liftClub("bench", 60), liftClub("bench", 80), liftClub("bench", 100),
+  liftClub("deadlift", 100), liftClub("deadlift", 140), liftClub("deadlift", 180),
+  { icon: "🚚", name: "First tonne", desc: "Lift 1 t of total volume", test: c => c.vol >= 1000 },
+  { icon: "🐘", name: "Elephant herd", desc: "Lift 25 t — about 4 elephants", test: c => c.vol >= 25000 },
+  { icon: "🐋", name: "Blue whale", desc: "Lift 150 t — one blue whale", test: c => c.vol >= 150000 },
+  { icon: "✈️", name: "Jumbo jet", desc: "Lift 180 t — a loaded 747", test: c => c.vol >= 180000 },
+  { icon: "⭐", name: "First star", desc: "Log a day under budget", test: c => c.wins >= 1 },
+  { icon: "🌟", name: "Star collector", desc: "10 win days", test: c => c.wins >= 10 },
+  { icon: "✨", name: "Constellation", desc: "30 win days", test: c => c.wins >= 30 },
+  { icon: "🌌", name: "Galaxy brain", desc: "75 win days", test: c => c.wins >= 75 },
+  { icon: "☕", name: "Fika discipline", desc: "10 win days that included fika", test: c => c.fikaWins >= 10 },
+  { icon: "🧘", name: "Bounce back", desc: "Win the day right after an over day", test: c => c.bounce >= 1 },
+  { icon: "🃏", name: "Full week hand", desc: "5 win days inside one week", test: c => c.bestWeekWins >= 5 },
+  { icon: "🥇", name: "Gold standard", desc: "Earn a gold week", test: c => c.golds >= 1 },
+  { icon: "🏆", name: "Gold hoarder", desc: "Earn 5 gold weeks", test: c => c.golds >= 5 },
+  { icon: "⚖️", name: "On the record", desc: "Log 10 weigh-ins", test: c => c.weighins >= 10 },
+  { icon: "📈", name: "Data devotee", desc: "Log 50 weigh-ins", test: c => c.weighins >= 50 },
+];
+
+function awardsHTML() {
+  const ctx = achCtx();
+  const cells = ACHIEVEMENTS.map(a => {
+    const got = a.test(ctx);
+    return `<div class="ach ${got ? "got" : ""}">
+      <div class="a-icon">${got ? a.icon : "🔒"}</div>
+      <div class="a-name">${a.name}</div>
+      <div class="a-desc">${a.desc}</div>
+    </div>`;
+  }).join("");
+  const n = ACHIEVEMENTS.filter(a => a.test(ctx)).length;
+  return `${appHeaderHTML("AWARDS", `<span class="tag">${n} / ${ACHIEVEMENTS.length}</span>`)}
+    <div class="ach-grid">${cells}</div>
+    <div class="wu-none" style="margin-top: 12px;">Awards unlock themselves from your logs — nothing to claim, nothing to lose.</div>`;
 }
 
 /* ================= reminders ================= */
