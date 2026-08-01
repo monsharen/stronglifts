@@ -1497,6 +1497,13 @@ const reminders = () => store.load("sl.reminders", { workout: false, weighin: fa
 
 const daysSince = iso => Math.floor((Date.now() - new Date(iso)) / 86400000);
 
+/* Whole calendar days between a date and today (midnight-to-midnight) */
+function calDaysSince(iso) {
+  const a = new Date(iso); a.setHours(0, 0, 0, 0);
+  const b = new Date(); b.setHours(0, 0, 0, 0);
+  return Math.round((b - a) / 86400000);
+}
+
 /* What's gently overdue right now, per the user's reminder settings */
 function dueNudges() {
   const r = reminders();
@@ -1512,10 +1519,16 @@ function dueNudges() {
       }
     }
   }
-  if (r.weighin) {
+  if (r.weighin && new Date().getHours() < 12) {
+    // Morning-only: weigh-ins happen before breakfast, so a nudge later in the
+    // day is moot. And only after two missed days — one gap is never nagged.
     const bw = bodyweights();
-    if (!bw.length || new Date(bw[bw.length - 1].date).toDateString() !== new Date().toDateString())
-      out.push({ id: "weighin", text: "No weigh-in logged today" });
+    const missed = bw.length ? calDaysSince(bw[bw.length - 1].date) : Infinity;
+    if (missed >= 2) {
+      out.push({ id: "weighin", text: bw.length
+        ? `${missed} days since your last weigh-in — step on the scale before breakfast`
+        : "Step on the scale before breakfast to start your weight log" });
+    }
   }
   return out;
 }
@@ -1573,7 +1586,7 @@ function remindersCardHTML() {
   return `<div class="section-title"><span>Reminders</span></div>
   <div class="chart-card">
     ${row("workout", "Workout reminder", "when it's been 3+ days since your last session")}
-    ${row("weighin", "Weigh-in reminder", "when no weight is logged today")}
+    ${row("weighin", "Weigh-in reminder", "mornings only, after two missed days — weigh in before breakfast")}
     <div class="wu-none" style="margin-top: 8px;">${hint}</div>
   </div>`;
 }
