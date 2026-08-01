@@ -1350,12 +1350,15 @@ function deleteBwEntry(idx) {
 const MEAL_SLOTS = [
   { key: "b",  name: "Breakfast" },
   { key: "l",  name: "Lunch" },
+  { key: "f",  name: "Fika" },
   { key: "d",  name: "Dinner" },
   { key: "dr", name: "Drinks" },
 ];
 const SNACK_MAX = 5;
 
-const mealsCfg = () => store.load("sl.mealsCfg", { budget: 2500, b: 500, l: 700, d: 900, dr: 200, sn: 150 });
+/* Merged with defaults so saved configs pick up newly added slots */
+const MEALS_CFG_DEFAULTS = { budget: 2500, b: 500, l: 700, f: 300, d: 900, dr: 200, sn: 150 };
+const mealsCfg = () => ({ ...MEALS_CFG_DEFAULTS, ...store.load("sl.mealsCfg", {}) });
 const mealDays = () => store.load("sl.meals", {}); // { "YYYY-MM-DD": { b, l, d, dr, sn } }
 
 function todayKey() {
@@ -1391,7 +1394,7 @@ function tapSnack() { editMealDay(d => { d.sn = ((d.sn || 0) + 1) % (SNACK_MAX +
 
 function saveMealsCfg() {
   const cfg = mealsCfg();
-  for (const [id, key] of [["cfg-budget", "budget"], ["cfg-b", "b"], ["cfg-l", "l"], ["cfg-d", "d"], ["cfg-dr", "dr"], ["cfg-sn", "sn"]]) {
+  for (const [id, key] of [["cfg-budget", "budget"], ["cfg-b", "b"], ["cfg-l", "l"], ["cfg-f", "f"], ["cfg-d", "d"], ["cfg-dr", "dr"], ["cfg-sn", "sn"]]) {
     const v = parseInt(document.getElementById(id).value, 10);
     if (!isNaN(v) && v > 0) cfg[key] = v;
   }
@@ -1463,6 +1466,7 @@ function mealsHTML() {
         <div class="cfg-item"><label>Budget</label><input inputmode="numeric" id="cfg-budget" value="${cfg.budget}"></div>
         <div class="cfg-item"><label>Breakfast</label><input inputmode="numeric" id="cfg-b" value="${cfg.b}"></div>
         <div class="cfg-item"><label>Lunch</label><input inputmode="numeric" id="cfg-l" value="${cfg.l}"></div>
+        <div class="cfg-item"><label>Fika</label><input inputmode="numeric" id="cfg-f" value="${cfg.f}"></div>
         <div class="cfg-item"><label>Dinner</label><input inputmode="numeric" id="cfg-d" value="${cfg.d}"></div>
         <div class="cfg-item"><label>Drinks</label><input inputmode="numeric" id="cfg-dr" value="${cfg.dr}"></div>
         <div class="cfg-item"><label>Snack</label><input inputmode="numeric" id="cfg-sn" value="${cfg.sn}"></div>
