@@ -115,17 +115,25 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
   .kudos .k-main {
-    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 56px;
-    text-transform: uppercase; letter-spacing: .02em; color: var(--volt); text-align: center; line-height: 1;
-    text-shadow: 0 0 34px rgba(216,255,62,.6), 0 2px 0 rgba(0,0,0,.4);
+    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 52px;
+    text-transform: uppercase; letter-spacing: .02em; color: var(--volt); text-align: center; line-height: 1.05;
+    background: rgba(16, 18, 22, .94);
+    border: 1px solid rgba(216, 255, 62, .45);
+    border-radius: 14px;
+    padding: 10px 24px 12px;
+    max-width: 86vw;
+    box-shadow: 0 10px 44px rgba(0, 0, 0, .6), 0 0 34px rgba(216, 255, 62, .25);
+    text-shadow: 0 0 22px rgba(216, 255, 62, .5);
     animation: k-pop 1.5s cubic-bezier(.2,1.6,.3,1) forwards;
   }
   .kudos .k-sub {
     font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--chalk); text-align: center;
-    background: rgba(16,18,22,.85); border-radius: 8px; padding: 4px 12px; margin-top: 10px;
+    background: rgba(16, 18, 22, .94); border: 1px solid var(--line); border-radius: 8px;
+    padding: 4px 12px; margin-top: 10px; max-width: 86vw;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .5);
     animation: k-sub 1.5s ease-out forwards;
   }
-  .kudos.small .k-main { font-size: 32px; animation-duration: .85s; }
+  .kudos.small .k-main { font-size: 30px; padding: 7px 16px 8px; animation-duration: .85s; }
   .kudos.small .k-sub { animation-duration: .85s; }
   @keyframes k-pop {
     0% { transform: scale(.15) rotate(-6deg); opacity: 0; }
