@@ -1263,12 +1263,9 @@ function dashHTML() {
     : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts, a weigh-in in Weight or a meal in Meals, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
-  const nudgeBanner = (isBonusDay(todayKey())
-      ? `<div class="nudge-card"><div class="n-row">🎰 Mystery ×2 day — a win day today is worth double XP</div></div>`
-      : "")
-    + (nudges.length
-      ? `<div class="nudge-card">${nudges.map(n => `<div class="n-row">${n.text}</div>`).join("")}</div>`
-      : "");
+  const nudgeBanner = nudges.length
+    ? `<div class="nudge-card">${nudges.map(n => `<div class="n-row">${n.text}</div>`).join("")}</div>`
+    : "";
 
   return `<header>
       <h1>HEALTH<span class="bar">LOG</span></h1>
@@ -1811,7 +1808,6 @@ function mealsHTML() {
 
   return `${appHeaderHTML("MEALS", `<span class="tag">calorie slots</span>`)}
     ${tiles}
-    ${isBonusDay(todayKey()) ? `<div class="nudge-card"><div class="n-row">🎰 Mystery ×2 day — today's ⭐ is worth double XP</div></div>` : ""}
     <div class="chart-card">
       <div class="chart-head">
         <h3>Today</h3>
@@ -1825,6 +1821,7 @@ function mealsHTML() {
         <button class="snack-btn ${day.sn ? "on" : ""}" onclick="tapSnack()">${day.sn || 0}</button>
       </div>
       <div class="wu-none" style="margin-top: 12px;">${statusLine}</div>
+      ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-top: 6px;">🎰 Mystery ×2 day — today's ⭐ is worth double XP.</div>` : ""}
     </div>
     ${chart}
     ${hist}
@@ -1954,6 +1951,7 @@ function progressCardHTML() {
       <span class="cur">${lv.xp} XP<span class="best">${lv.next ? lv.next - lv.xp + " to next" : "max level"}</span></span>
     </div>
     <div class="cal-bar"><div class="cal-fill" style="width: ${pct}%"></div></div>
+    ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-bottom: 6px;">🎰 Mystery ×2 day — a ⭐ logged today is worth double XP.</div>` : ""}
     <div class="wu-none">${weekLine}</div>
     <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
     <div class="wu-none" style="margin-top: 6px;">Workout +${XP.workout} · win day +${XP.win} · weigh-in +${XP.weighin} · all three in one day +${XP.combo}</div>
