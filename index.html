@@ -90,13 +90,7 @@
   .tile.tap { cursor: pointer; }
   .tile.tap:active { background: var(--panel-2); }
 
-  /* ---------- nudges & reminders ---------- */
-  .nudge-card {
-    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--volt);
-    border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px; font-size: 12px;
-  }
-  .nudge-card .n-row { padding: 2px 0; }
-  .nudge-card .n-row::before { content: "→ "; color: var(--volt); }
+  /* ---------- reminders ---------- */
   .tog-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); cursor: pointer; }
   .tog-row:first-child { border-top: none; padding-top: 0; }
   .tog-row .t-name { font-size: 13px; }
@@ -1272,7 +1266,11 @@ function dashHTML() {
 
   const nudges = dueNudges();
   const nudgeBanner = nudges.length
-    ? `<div class="nudge-card">${nudges.map(n => `<div class="n-row">${n.text}</div>`).join("")}</div>`
+    ? `<div class="section-title"><span>Due today</span></div>
+      <div class="chart-card" id="nudges">${nudges.map(n => `<div class="tog-row" onclick="navigate('${n.route}')">
+        <span><span class="t-name">${n.name}</span><br><span class="t-sub">${n.sub}</span></span>
+        <span class="t-sub">→</span>
+      </div>`).join("")}</div>`
     : "";
 
   return `<header>
@@ -2071,12 +2069,12 @@ function dueNudges() {
   const out = [];
   if (r.workout) {
     if (draft) {
-      out.push({ id: "workout", text: "You have a workout in progress — finish and save it" });
+      out.push({ id: "workout", name: "Workout in progress", sub: "finish and save it", route: "#/stronglifts" });
     } else {
       const all = sessions();
       if (all.length) {
         const d = daysSince(all[all.length - 1].startedAt);
-        if (d >= 3) out.push({ id: "workout", text: `Workout ${nextWorkoutType()} is waiting — last session ${d} days ago` });
+        if (d >= 3) out.push({ id: "workout", name: `Workout ${nextWorkoutType()} is waiting`, sub: `last session ${d} days ago`, route: "#/stronglifts" });
       }
     }
   }
@@ -2086,9 +2084,9 @@ function dueNudges() {
     const bw = bodyweights();
     const missed = bw.length ? calDaysSince(bw[bw.length - 1].date) : Infinity;
     if (missed >= 2) {
-      out.push({ id: "weighin", text: bw.length
-        ? `${missed} days since your last weigh-in — step on the scale before breakfast`
-        : "Step on the scale before breakfast to start your weight log" });
+      out.push(bw.length
+        ? { id: "weighin", name: "Weigh-in due", sub: `${missed} days since last — step on the scale before breakfast`, route: "#/weight" }
+        : { id: "weighin", name: "Start your weight log", sub: "step on the scale before breakfast", route: "#/weight" });
     }
   }
   return out;
@@ -2124,7 +2122,7 @@ async function notifyNudges() {
     store.save("sl.reminders", r);
     try {
       const reg = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : null;
-      const opts = { body: n.text, tag: "hl-" + n.id, silent: true, icon: "icon-192.png" };
+      const opts = { body: `${n.name} — ${n.sub}`, tag: "hl-" + n.id, silent: true, icon: "icon-192.png" };
       if (reg) await reg.showNotification("HEALTH LOG", opts);
       else new Notification("HEALTH LOG", opts);
     } catch { /* notifications unavailable */ }
