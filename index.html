@@ -110,6 +110,36 @@
   .tog.on::after { left: 20px; background: var(--volt-ink); }
 
   /* ---------- celebrations ---------- */
+  .kudos {
+    position: fixed; inset: 0; z-index: 100; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .kudos .k-main {
+    font-family: "Big Shoulders Display", sans-serif; font-weight: 900; font-size: 56px;
+    text-transform: uppercase; letter-spacing: .02em; color: var(--volt); text-align: center; line-height: 1;
+    text-shadow: 0 0 34px rgba(216,255,62,.6), 0 2px 0 rgba(0,0,0,.4);
+    animation: k-pop 1.5s cubic-bezier(.2,1.6,.3,1) forwards;
+  }
+  .kudos .k-sub {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px; color: var(--chalk); text-align: center;
+    background: rgba(16,18,22,.85); border-radius: 8px; padding: 4px 12px; margin-top: 10px;
+    animation: k-sub 1.5s ease-out forwards;
+  }
+  .kudos.small .k-main { font-size: 32px; animation-duration: .85s; }
+  .kudos.small .k-sub { animation-duration: .85s; }
+  @keyframes k-pop {
+    0% { transform: scale(.15) rotate(-6deg); opacity: 0; }
+    16% { transform: scale(1.18) rotate(2deg); opacity: 1; }
+    28% { transform: scale(1) rotate(0); }
+    78% { transform: scale(1); opacity: 1; }
+    100% { transform: translateY(-46px) scale(.9); opacity: 0; }
+  }
+  @keyframes k-sub {
+    0% { opacity: 0; transform: translateY(10px); }
+    22% { opacity: 1; transform: none; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
   .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 99; overflow: hidden; }
   .confetti i { position: absolute; top: -14px; width: 7px; height: 11px; opacity: .95; animation: conf-fall linear forwards; }
   @keyframes conf-fall { to { transform: translateY(105vh) rotate(720deg); opacity: .6; } }
@@ -888,6 +918,66 @@ function celebrate(big) {
   if (navigator.vibrate) navigator.vibrate(big ? [60, 40, 60] : 30);
 }
 
+/* Big bouncy overlay text, Candy Crush style. Queued so bursts play in sequence. */
+const kudosQueue = [];
+let kudosActive = false;
+
+function kudos(main, sub = "", small = false) {
+  kudosQueue.push({ main, sub, small });
+  pumpKudos();
+}
+
+function pumpKudos() {
+  if (kudosActive || !kudosQueue.length) return;
+  kudosActive = true;
+  const k = kudosQueue.shift();
+  const el = document.createElement("div");
+  el.className = "kudos" + (k.small ? " small" : "");
+  el.innerHTML = `<div class="k-main">${k.main}</div>${k.sub ? `<div class="k-sub">${k.sub}</div>` : ""}`;
+  document.body.appendChild(el);
+  setTimeout(() => { el.remove(); kudosActive = false; pumpKudos(); }, k.small ? 850 : 1500);
+}
+
+/* Escalating hype ladder — later sets in a session earn bigger words */
+const HYPE = ["Nice!", "Sweet!", "Strong!", "Smooth!", "Crushed it!", "Beast mode!", "Divine!", "LEGENDARY!"];
+const hypeAt = i => HYPE[Math.min(i, HYPE.length - 1)];
+const pickOne = a => a[Math.floor(Math.random() * a.length)];
+const MEAL_HYPE = ["Logged!", "Noted!", "Tracked!", "On it!", "Counted!"];
+
+function lifetimeVol() {
+  let v = 0;
+  for (const s of sessions())
+    for (const e of s.entries)
+      for (const r of e.setReps) v += r * e.weight;
+  return v;
+}
+
+/* Snapshot → act → juiceAfter: fires extra fanfares when a logging action
+   crosses a milestone (lifetime tonne, level-up, weekly medal). */
+function juiceSnapshot() {
+  return {
+    level: levelInfo().n,
+    medal: medalFor(weeklyPoints()[weekKeyOf(new Date())] || 0),
+    tonnes: Math.floor(lifetimeVol() / 1000),
+  };
+}
+
+function juiceAfter(before) {
+  const after = juiceSnapshot();
+  if (after.tonnes > before.tonnes) {
+    confetti(60);
+    kudos(`${after.tonnes} tonnes!`, `WOW — you've now lifted ${fmtVolume(Math.round(lifetimeVol()))} in your lifetime`);
+  }
+  if (after.level > before.level) {
+    confetti(70);
+    chime("fanfare");
+    kudos("Level up!", `LVL ${after.level} · ${LEVELS[after.level - 1].title}`);
+  }
+  if (after.medal && after.medal !== before.medal) {
+    kudos(`${after.medal} week!`, "weekly medal secured — see the shelf on your dashboard");
+  }
+}
+
 function startRest() {
   armAudio();
   draft.rest = { start: Date.now(), guide: restGuide() };
@@ -1537,12 +1627,24 @@ function logBodyweight() {
   const now = new Date().toISOString();
   const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const entry = { date: now, kg: Math.round(w * 10) / 10 };
+  const before = juiceSnapshot();
+  const prevKg = bw.length ? bw[bw.length - 1].kg : null;
+  const wasMin = bw.length ? Math.min(...bw.map(b => b.kg)) : Infinity;
   if (bw.length && sameDay(bw[bw.length - 1].date, now)) bw[bw.length - 1] = entry;
   else bw.push(entry);
   store.save("sl.bw", bw);
   armAudio();
   chime("tick");
   if (navigator.vibrate) navigator.vibrate(15);
+  const delta = prevKg === null ? null : Math.round((entry.kg - prevKg) * 10) / 10;
+  const deltaTxt = delta === null ? "" : delta === 0 ? "same as last time · " : `${delta > 0 ? "+" : ""}${delta} kg vs last · `;
+  if (entry.kg < wasMin && bw.length >= 5) {
+    celebrate(true);
+    kudos("New low!", `${fmtKg(entry.kg)} — lightest ever logged · +${XP.weighin} XP`);
+  } else {
+    kudos("Logged!", `${deltaTxt}+${XP.weighin} XP`, true);
+  }
+  juiceAfter(before);
   render();
 }
 
@@ -1602,11 +1704,28 @@ function editMealDay(mutate) {
   render();
   // Dinner ticked with budget intact = the day's star is secured; occasionally jackpot-sized
   const secured = !!day.d && dayKcal(day, cfg) <= cfg.budget;
-  if (secured && !wasSecured) celebrate(Math.random() < 1 / 8);
+  if (secured && !wasSecured) {
+    celebrate(Math.random() < 1 / 8);
+    const left = cfg.budget - dayKcal(day, cfg);
+    kudos("⭐ Win day!", `dinner banked with ${left} kcal to spare${isBonusDay(todayKey()) ? " · 🎰 ×2 day — double XP!" : ""}`);
+  }
 }
 
-function toggleMeal(key) { editMealDay(d => { d[key] = d[key] ? 0 : 1; }); }
-function tapSnack() { editMealDay(d => { d.sn = ((d.sn || 0) + 1) % (SNACK_MAX + 1); }); }
+function toggleMeal(key) {
+  const before = juiceSnapshot();
+  let added = false;
+  editMealDay(d => { d[key] = d[key] ? 0 : 1; added = !!d[key]; });
+  if (added) { armAudio(); chime("tick"); kudos(pickOne(MEAL_HYPE), "", true); }
+  juiceAfter(before);
+}
+
+function tapSnack() {
+  const before = juiceSnapshot();
+  let n = 0;
+  editMealDay(d => { d.sn = ((d.sn || 0) + 1) % (SNACK_MAX + 1); n = d.sn; });
+  if (n) { armAudio(); chime("tick"); kudos(`Snack ×${n}`, "", true); }
+  juiceAfter(before);
+}
 
 function saveMealsCfg() {
   const cfg = mealsCfg();
@@ -1749,14 +1868,18 @@ function openChest() {
   if (Math.floor(xpBreakdown().wins / 5) <= chests.opened) return;
   const xs = [25, 25, 25, 50, 50, 100];
   const trophies = ["🏆", "🎖️", "🍾", "💎", "👑", "🦄", "🔥", "🚀", "🥂", "🧨"];
-  chests.opened++;
-  chests.rewards.push({
+  const before = juiceSnapshot();
+  const reward = {
     xp: xs[Math.floor(Math.random() * xs.length)],
     trophy: trophies[Math.floor(Math.random() * trophies.length)],
     at: new Date().toISOString(),
-  });
+  };
+  chests.opened++;
+  chests.rewards.push(reward);
   store.save("sl.chests", chests);
   celebrate(true);
+  kudos(`${reward.trophy} +${reward.xp} XP`, "chest opened — loot added to your shelf");
+  juiceAfter(before);
   render();
 }
 
@@ -2042,7 +2165,13 @@ function tapSet(ei, si) {
   } else {
     armAudio();
     draft.rest = { start: Date.now(), guide: restGuide() };
-    if (e.setReps[si] === target) { chime("tick"); if (navigator.vibrate) navigator.vibrate(15); }
+    if (e.setReps[si] === target) {
+      chime("tick");
+      if (navigator.vibrate) navigator.vibrate(15);
+      const done = draft.entries.reduce((n, en) => n + en.setReps.filter(r => r === EXERCISES[en.ex].reps).length, 0);
+      const sessVol = draft.entries.reduce((v, en) => v + en.setReps.reduce((x, r) => x + (r || 0), 0) * en.weight, 0);
+      kudos(hypeAt(done - 1), done % 3 === 0 ? `${fmtVolume(Math.round(sessVol))} moved this session` : "", true);
+    }
   }
   saveDraft();
   render();
@@ -2082,12 +2211,17 @@ function finishSession() {
   // Unlogged sets count as 0 reps (not done)
   draft.entries.forEach(e => { e.setReps = e.setReps.map(r => r === null ? 0 : r); });
   draft.finishedAt = new Date().toISOString();
+  const before = juiceSnapshot();
   const prs = sessionPRs(draft);
+  const sessVol = draft.entries.reduce((v, e) => v + e.setReps.reduce((x, r) => x + r, 0) * e.weight, 0);
   all.push(draft);
   store.save("sl.sessions", all);
   store.drop("sl.draft");
   draft = null;
   if (prs.length) { prBanner = prs; celebrate(true); }
+  else celebrate(false);
+  kudos("Workout done!", `${fmtVolume(Math.round(sessVol))} this session · ${fmtVolume(Math.round(lifetimeVol()))} lifetime · +${XP.workout} XP`);
+  juiceAfter(before);
   navigate("#/stronglifts");
 }
 
