@@ -1056,13 +1056,33 @@ function volumeSeries() {
   });
 }
 
+/* Warm-up volume for one entry. Ticked warm-ups count as recorded; if none
+   were ticked but work sets were logged, assume the standard plan was done —
+   that's how history back-fills, since the plan derives from the work weight. */
+function entryWarmupVol(e) {
+  const plan = warmupPlan(e.ex, e.weight);
+  if (!plan.length) return 0;
+  if (e.wu && e.wu.some(t => t))
+    return plan.reduce((v, row, i) => v + (e.wu[i] ? row.w * row.reps : 0), 0);
+  return e.setReps.some(r => r > 0)
+    ? plan.reduce((v, row) => v + row.w * row.reps, 0)
+    : 0;
+}
+
+const sessionWarmupVol = s => s.entries.reduce((v, e) => v + entryWarmupVol(e), 0);
+
+/* Aligned with volumeSeries, one value per session */
+function warmupSeries() {
+  return sessions().map(s => ({ weight: Math.round(sessionWarmupVol(s)) }));
+}
+
 function fmtVolume(kg) {
   return kg >= 1000 ? (kg / 1000).toFixed(1).replace(/\.0$/, "") + " t" : kg + " kg";
 }
 
-function chartSVG(pts, prIdx = -1, fmtLabel = w => w) {
+function chartSVG(pts, prIdx = -1, fmtLabel = w => w, aux = null) {
   const W = 320, H = 110, P = { l: 34, r: 12, t: prIdx >= 0 ? 26 : 12, b: 8 };
-  const ws = pts.map(p => p.weight);
+  const ws = pts.map(p => p.weight).concat(aux ? aux.map(a => a.weight) : []);
   let min = Math.min(...ws), max = Math.max(...ws);
   if (min === max) { min -= 2.5; max += 2.5; }
   const pad = (max - min) * 0.1;
@@ -1075,6 +1095,9 @@ function chartSVG(pts, prIdx = -1, fmtLabel = w => w) {
     <line x1="${P.l}" y1="${y(w)}" x2="${W - P.r}" y2="${y(w)}" stroke="#2b303a" stroke-dasharray="3 4" stroke-width="1"/>
     <text x="${P.l - 6}" y="${y(w) + 3}" text-anchor="end" fill="#8b8f99" font-size="9" font-family="IBM Plex Mono, monospace">${fmtLabel(w)}</text>`).join("");
 
+  const auxLine = aux && aux.length > 1 && aux.length === pts.length
+    ? `<polyline points="${aux.map((a, i) => `${x(i)},${y(a.weight)}`).join(" ")}" fill="none" stroke="#8b8f99" stroke-width="1.5" stroke-dasharray="2 4"/>`
+    : "";
   const line = pts.length > 1
     ? `<polyline points="${pts.map((p, i) => `${x(i)},${y(p.weight)}`).join(" ")}" fill="none" stroke="#d8ff3e" stroke-width="2" stroke-linejoin="round"/>`
     : "";
@@ -1089,7 +1112,7 @@ function chartSVG(pts, prIdx = -1, fmtLabel = w => w) {
        <text x="${x(prIdx)}" y="${y(pts[prIdx].weight) - 11}" text-anchor="middle" fill="#d8ff3e" font-size="9" font-weight="bold" font-family="IBM Plex Mono, monospace">PR</text>`
     : "";
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${line}${dots}${pr}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${auxLine}${line}${dots}${pr}</svg>`;
 }
 
 /* Epley estimated 1RM from a 5-rep working weight */
@@ -1106,9 +1129,11 @@ function statsHTML() {
       for (const e of s.entries)
         for (const r of e.setReps) { reps += r; vol += r * e.weight; }
 
+    const wuTotal = all.reduce((v, s) => v + sessionWarmupVol(s), 0);
     const tiles = `<div class="tiles">
       <div class="tile"><div class="num">${all.length}</div><div class="lbl">Sessions</div></div>
       <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Volume</div></div>
+      <div class="tile"><div class="num">${fmtVolume(Math.round(wuTotal))}</div><div class="lbl">Warm-up</div></div>
       <div class="tile"><div class="num">${reps}</div><div class="lbl">Reps</div></div>
     </div>`;
 
@@ -1183,13 +1208,13 @@ function statsHTML() {
           <h3>Session volume</h3>
           <span class="cur">${fmtVolume(cur)}<span class="best">best ${fmtVolume(best)}</span></span>
         </div>
-        ${chartSVG(volPts, bestIdx, w => fmtVolume(Math.round(w)))}
+        ${chartSVG(volPts, bestIdx, w => (w / 1000).toFixed(1) + " t", warmupSeries())}
         <div class="chart-dates">
           <span>${fmtDate(volPts[0].date)}</span>
           <span>${volPts.length} session${volPts.length === 1 ? "" : "s"}</span>
           <span>${fmtDate(volPts[volPts.length - 1].date)}</span>
         </div>
-        <div class="wu-none" style="margin-top: 8px;">Total weight moved in each workout, any type — every logged rep × its weight, all exercises combined.</div>
+        <div class="wu-none" style="margin-top: 8px;">Total weight moved in each workout — every logged rep × its weight. The dotted line is your warm-up sets: you lift that weight too.</div>
       </div>`;
     }
 
@@ -1239,7 +1264,8 @@ function dashHTML() {
       <h3>Weight lifted</h3>
       <span class="cur">${fmtVolume(volPts[volPts.length - 1].weight)}<span class="best">last workout</span></span>
     </div>
-    ${volPts.length > 1 ? chartSVG(volPts, -1, w => fmtVolume(Math.round(w))) : ""}
+    ${volPts.length > 1 ? chartSVG(volPts, -1, w => (w / 1000).toFixed(1) + " t", warmupSeries()) : ""}
+    <div class="chart-dates"><span>— work sets</span><span>┄ warm-up sets</span></div>
   </div>` : "";
 
   const bwPts = bwSeries();
