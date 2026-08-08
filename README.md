@@ -1,8 +1,8 @@
 # Health Log
 
-A personal health suite in a single HTML file — no backend, no accounts, no tracking, fully offline. What started as a [StrongLifts 5×5](https://stronglifts.com/) workout logger grew into a small family of apps that share one local data store, styled after Apple's Human Interface Guidelines with Stocks-style charts and a Fitness-style tab bar.
+My personal health app. Everything runs in a single HTML file in the browser. No backend, no accounts, no tracking. All data stays on the device.
 
-**Open it here → https://monsharen.github.io/stronglifts/**
+**Open it here: https://monsharen.github.io/stronglifts/**
 
 | Summary | StrongLifts | Body |
 |---|---|---|
@@ -12,41 +12,37 @@ A personal health suite in a single HTML file — no backend, no accounts, no tr
 |---|---|
 | ![Meals](screenshots/meals.png) | ![Awards with 3D medal](screenshots/awards.png) |
 
-## The apps
+## What's inside
 
-- **Summary** — weekly activity rings (workouts, weigh-in days, win days), cross-app analytics charts (weight lifted, weight logged, calories, waist), data-driven insights ("weeks with 4+ win days: −0.5 kg on the scale"), a monthly recap, weekly medals with 3D rotatable coins, and gentle reminders.
-- **StrongLifts** — the full 5×5 program: alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator, a rest timer, and stats including the powerlifting competition total (squat + bench + deadlift), session tonnage with a dotted warm-up line, and per-lift PR charts.
-- **Body** — morning weigh-ins with BMI, a goal weight with kg/week pace and a projected arrival date, a ghost race against real past regime runs (beat 2022-you), and tape measurements (waist, chest, arm, thigh) behind a Weight/Measure switch.
-- **Meals** — calorie tracking without food diaries: tick meal slots (breakfast, lunch, fika, dinner, drinks, snacks) with rough per-slot estimates against a daily budget. Stay under budget and the day earns a ⭐. Missed days simply don't exist — no streaks, no nagging.
-- **Awards** — 29 achievements rendered as 3D medals in themed materials (gold, sapphire, emerald, obsidian…), each engraved on the back with the date it was earned. Everything unlocks retroactively from your logs.
+- **Summary**: weekly activity rings (workouts, weigh-in days, win days), charts for weight lifted, weight logged, calories and waist, insights computed from my own data, a monthly recap, weekly medals as 3D coins and optional reminders.
+- **StrongLifts**: full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift.
+- **Body**: morning weigh-ins with BMI, a goal weight with pace and estimated finish date, a ghost race against my earlier runs, and tape measurements (waist, chest, arm, thigh) behind a Weight/Measure switch.
+- **Meals**: no calorie counting, just meal slots. Tick breakfast, lunch, fika, dinner, drinks and snacks against a daily budget. A day under budget earns a star. Missed days are fine and count against nothing.
+- **Awards**: 29 achievements as rotatable 3D medals in different materials, with the date earned engraved on the back. Everything unlocks from logged data, nothing to claim.
 
 ## How to use
 
-1. **Open the app** at the link above (or serve the repo folder with any static file server and open `index.html`).
-2. **Log a workout**: StrongLifts tab → *Start workout* → tap the warm-up and work-set circles as you lift (tap once for all reps, tap again to count down). The rest timer starts itself; *Finish & save* when done. The next session's weights are computed for you.
-3. **Weigh in each morning** (before breakfast, for a consistent reading): Body tab → type the number → *Log weight*. Set your height and a goal weight in the profile below for BMI, pace and an ETA.
-4. **Tick your meals** as the day goes: Meals tab → tap the slots you used. Keeping the day under budget banks a ⭐ win day — the app celebrates with you.
-5. **Watch the Summary**: rings fill through the week, medals and chests accumulate, and insights appear once your data can prove something.
-6. **Back up occasionally**: Summary → *Copy backup* puts everything on your clipboard as JSON; *Import backup* merges it on another device. Data never leaves your devices otherwise.
+1. Open the app at the link above.
+2. Log workouts in StrongLifts: Start workout, tap the circles as you lift (once for all reps, again to count down), then Finish & save. The next session's weights are calculated automatically.
+3. Weigh in each morning before breakfast in Body. Set height and goal weight in the profile to get BMI, pace and a finish date.
+4. Tick meals during the day in Meals. Stay under budget to earn the star. Yesterday can be backfilled if a day slips.
+5. Check Summary for rings, medals, recaps and insights.
+6. Back up now and then: Copy backup in Summary puts everything on the clipboard as JSON, Import backup merges it on another device.
 
-Everything is optional and nothing nags: reminders are opt-in (a workout nudge after 3+ idle days, a morning weigh-in nudge after two missed days), and skipped days are expected, not punished.
+Reminders are opt-in: a workout nudge after 3+ idle days and a morning weigh-in nudge after two missed days. Nothing else nags.
 
 ## Install as an app (PWA)
 
-Health Log is a Progressive Web App — it installs to your home screen and works fully offline:
+- iPhone/iPad: open in Safari, tap Share, then Add to Home Screen.
+- Android: open in Chrome, menu, Install app.
+- Desktop: install icon in the address bar in Chrome/Edge.
 
-- **iPhone / iPad**: open the link in Safari → Share → **Add to Home Screen**. The app runs full-screen with its own icon; the app badge shows due reminders (iOS 16.4+).
-- **Android**: open in Chrome → menu → **Install app** (or accept the install banner).
-- **Desktop**: Chrome/Edge show an install icon in the address bar.
-
-After an update is deployed, the installed app picks it up on the next launch or two (cache-then-refresh service worker).
-
-Your data lives in the browser's local storage of the installing browser — use the backup copy/import to move history between browsers or devices.
+Works fully offline once installed. Updates arrive on the next launch or two. Data lives in the browser that installed it, so use backup to move history between devices.
 
 ## Development
 
-- `index.html` — the entire app: styles, all apps, charts (hand-rolled SVG), 3D medals (pure CSS transforms), celebration engine. No dependencies, no build step.
-- `sw.js` — offline cache; bump the `CACHE` version when shipping UI changes.
-- `manifest.webmanifest` + icons — PWA install metadata.
+- `index.html`: the entire app. Styles, all views, hand-rolled SVG charts, CSS-transform 3D medals, celebration effects. No dependencies, no build step.
+- `sw.js`: offline cache. Bump `CACHE` when shipping changes.
+- `manifest.webmanifest` + icons: PWA metadata.
 
-To develop: edit `index.html`, open it in a browser, refresh. All data keys are prefixed `sl.` in localStorage; the export format is a single JSON object.
+Edit `index.html`, open in a browser, refresh. Data is stored in localStorage under `sl.*` keys and the export format is a single JSON object.
