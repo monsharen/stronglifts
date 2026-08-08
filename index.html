@@ -521,6 +521,42 @@
   .ach .a-icon { font-size: 26px; line-height: 1.3; }
   .ach .a-name { font-weight: 600; font-size: 12px; margin-top: 3px; letter-spacing: -.01em; }
   .ach .a-desc { color: var(--dim); font-size: 10px; margin-top: 2px; line-height: 1.35; }
+
+  /* ---------- depth & polish: light-from-above, gradients, glow ---------- */
+  :root { --radius: 18px; }
+  .chart-card, .tile, .hist-card, .ex-card, .next-card, .pr-card, .ach {
+    background: linear-gradient(180deg, #1f1f23, #17171a);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .055), 0 12px 28px rgba(0, 0, 0, .32);
+  }
+  .chart-card.tap, .tile.tap, .ach { transition: transform .12s ease; }
+  .chart-card.tap:active, .tile.tap:active, .ach:active {
+    background: linear-gradient(180deg, #26262b, #1c1c20);
+    transform: scale(.98);
+  }
+  .tile .num, .cal-num, .rest-time, .r-val, .next-card h2, .sess-head h2 {
+    font-family: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  .btn-volt {
+    background: linear-gradient(180deg, #3fdf6c, #25bd4b);
+    box-shadow: 0 8px 20px rgba(48, 209, 88, .25), inset 0 1px 0 rgba(255, 255, 255, .28);
+    transition: transform .12s ease, opacity .12s;
+  }
+  .btn-volt:active { transform: scale(.98); opacity: .92; }
+  .cal-bar { background: #101012; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .55); }
+  .cal-fill { background: linear-gradient(180deg, #45e070, #27b94b); }
+  .cal-fill.warn { background: linear-gradient(180deg, #ffb84d, #f08800); }
+  .cal-fill.over { background: linear-gradient(180deg, #ff6259, #e5382c); }
+  .meal-btn.on, .set-btn.done, .wu-set.checked .wu-btn {
+    background: linear-gradient(180deg, #3fdf6c, #25bd4b);
+    box-shadow: 0 4px 14px rgba(48, 209, 88, .3), inset 0 1px 0 rgba(255, 255, 255, .3);
+  }
+  .tog.on { background: linear-gradient(180deg, #3fdf6c, #27bd4c); }
+  .tabbar { box-shadow: 0 -1px 0 rgba(255, 255, 255, .045); }
+  .tabbar button.on svg { filter: drop-shadow(0 0 7px rgba(48, 209, 88, .55)); }
+  .tabs { box-shadow: inset 0 1px 2px rgba(0, 0, 0, .4); }
+  .tab.active { background: linear-gradient(180deg, #46464c, #38383d); }
+  .hist-head .badge { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07); }
+  .rest-bar { box-shadow: 0 12px 34px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .06); }
 </style>
 </head>
 <body>
@@ -1172,20 +1208,26 @@ function chartSVG(pts, prIdx = -1, fmtLabel = w => w, aux = null, color = "#30d1
     ? `<polyline points="${aux.map((a, i) => `${x(i)},${y(a.weight)}`).join(" ")}" fill="none" stroke="rgba(235,235,245,.4)" stroke-width="1.5" stroke-dasharray="2 4"/>`
     : "";
   const line = pts.length > 1
-    ? `<polyline points="${pts.map((p, i) => `${x(i)},${y(p.weight)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+    ? `<polyline points="${pts.map((p, i) => `${x(i)},${y(p.weight)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" style="filter: drop-shadow(0 0 4px ${color}55);"/>`
     : "";
   const dots = pts.map((p, i) => {
     const stroke = p.warn ? "#ff9f0a" : p.ok ? color : "#ff453a";
     const fill = p.warn || !p.ok ? "#1c1c1e" : color;
     return `<circle cx="${x(i)}" cy="${y(p.weight)}" r="3" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
   }).join("");
+  const lastP = pts[pts.length - 1];
+  const live = pts.length > 1 && lastP.ok && !lastP.warn
+    ? `<circle cx="${x(pts.length - 1)}" cy="${y(lastP.weight)}" r="7" fill="${color}" fill-opacity=".22"/>
+       <circle cx="${x(pts.length - 1)}" cy="${y(lastP.weight)}" r="3.4" fill="${color}"/>
+       <circle cx="${x(pts.length - 1)}" cy="${y(lastP.weight)}" r="1.5" fill="#fff"/>`
+    : "";
 
   const pr = prIdx >= 0
     ? `<circle cx="${x(prIdx)}" cy="${y(pts[prIdx].weight)}" r="7" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="2 2"/>
        <text x="${x(prIdx)}" y="${y(pts[prIdx].weight) - 11}" text-anchor="middle" fill="${color}" font-size="9" font-weight="600" font-family="${CHART_FONT}">PR</text>`
     : "";
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${area}${auxLine}${line}${dots}${pr}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${area}${auxLine}${line}${dots}${live}${pr}</svg>`;
 }
 
 /* Epley estimated 1RM from a 5-rep working weight */
@@ -1307,13 +1349,18 @@ function statsHTML() {
 /* Fitness-style weekly activity rings: workouts, weigh-in days, win days */
 function ringsSVG(fracs) {
   const size = 128, c = size / 2;
-  const ring = (radius, frac, color) => {
+  const colors = [["#5ee27f", "#1fa04a", "#30d158"], ["#63b2ff", "#0a6ae0", "#0a84ff"], ["#ffc662", "#f08800", "#ff9f0a"]];
+  const defs = colors.map((cl, i) => `<linearGradient id="rg${i}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${cl[0]}"/><stop offset="1" stop-color="${cl[1]}"/>
+    </linearGradient>`).join("");
+  const ring = (radius, frac, i) => {
     const circ = 2 * Math.PI * radius;
-    return `<circle cx="${c}" cy="${c}" r="${radius}" fill="none" stroke="${color}" stroke-opacity=".16" stroke-width="13"/>
-      <circle cx="${c}" cy="${c}" r="${radius}" fill="none" stroke="${color}" stroke-width="13" stroke-linecap="round"
+    return `<circle cx="${c}" cy="${c}" r="${radius}" fill="none" stroke="${colors[i][2]}" stroke-opacity=".14" stroke-width="13"/>
+      <circle cx="${c}" cy="${c}" r="${radius}" fill="none" stroke="url(#rg${i})" stroke-width="13" stroke-linecap="round"
+        style="filter: drop-shadow(0 0 4px ${colors[i][2]}66);"
         stroke-dasharray="${(Math.max(.001, Math.min(1, frac)) * circ).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90 ${c} ${c})"/>`;
   };
-  return `<svg viewBox="0 0 ${size} ${size}" class="rings">${ring(55, fracs[0], "#30d158")}${ring(40, fracs[1], "#0a84ff")}${ring(25, fracs[2], "#ff9f0a")}</svg>`;
+  return `<svg viewBox="0 0 ${size} ${size}" class="rings"><defs>${defs}</defs>${ring(55, fracs[0], 0)}${ring(40, fracs[1], 1)}${ring(25, fracs[2], 2)}</svg>`;
 }
 
 const RING_GOALS = { workouts: 3, weighins: 5, wins: 5 };
