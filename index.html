@@ -1369,6 +1369,7 @@ function dashHTML() {
     ${progressCardHTML()}
     <div class="section-title"><span>Across your apps</span></div>
     ${analytics}
+    ${insightsCardHTML()}
     ${recapCardHTML()}
     ${remindersCardHTML()}
     <div class="section-title"><span>Your data</span></div>
@@ -2382,6 +2383,72 @@ async function copyRecap() {
   } catch {
     prompt("Copy your recap:", lines.join("\n"));
   }
+}
+
+/* ================= insights: what your own data says ================= */
+
+const fmtSigned = v => (v > 0 ? "+" : "") + v;
+
+/* Weekly weight change grouped by win-day count — does the regime show on the scale? */
+function insightWins() {
+  const cfg = mealsCfg(), days = mealDays();
+  const bw = bodyweights();
+  if (!bw.length) return null;
+  const winByWeek = {}, loggedWeeks = new Set();
+  for (const k of Object.keys(days)) {
+    const wk = weekKeyOf(parseDayKey(k));
+    loggedWeeks.add(wk);
+    if (dayKcal(days[k], cfg) <= cfg.budget) winByWeek[wk] = (winByWeek[wk] || 0) + 1;
+  }
+  const chg = {};
+  for (const wk of loggedWeeks) {
+    const start = parseDayKey(wk).getTime(), end = start + 7 * 86400000;
+    let prev = null, last = null;
+    for (const b of bw) {
+      const t = new Date(b.date).getTime();
+      if (t < start) prev = b.kg;
+      else if (t < end) last = b.kg;
+    }
+    if (prev !== null && last !== null) chg[wk] = last - prev;
+  }
+  const good = [], other = [];
+  for (const wk of Object.keys(chg)) ((winByWeek[wk] || 0) >= 4 ? good : other).push(chg[wk]);
+  if (good.length < 2 || other.length < 1) return null;
+  const avg = a => Math.round(a.reduce((s, x) => s + x, 0) / a.length * 100) / 100;
+  const g = avg(good), o = avg(other);
+  return `Weeks with 4+ ⭐ win days: ${fmtSigned(g)} kg on the scale · other logged weeks: ${fmtSigned(o)} kg${g < o ? " — win weeks beat the rest. The regime shows." : "."}`;
+}
+
+/* Scale movement in the three days after a Drinks day */
+function insightDrinks() {
+  const days = mealDays();
+  const bw = bodyweights();
+  const samples = [];
+  for (const k of Object.keys(days).filter(k => days[k].dr)) {
+    const dayEnd = parseDayKey(k).getTime() + 86400000;
+    const windowEnd = dayEnd + 3 * 86400000;
+    let base = null, peak = null;
+    for (const b of bw) {
+      const t = new Date(b.date).getTime();
+      if (t < dayEnd) base = b.kg;
+      else if (t < windowEnd) peak = peak === null ? b.kg : Math.max(peak, b.kg);
+    }
+    if (base !== null && peak !== null) samples.push(peak - base);
+  }
+  if (samples.length < 2) return null;
+  const avg = Math.round(samples.reduce((s, x) => s + x, 0) / samples.length * 100) / 100;
+  return avg > 0.1
+    ? `After a Drinks day the scale ran ${fmtSigned(avg)} kg over the following three days on average (${samples.length} samples) — it settles; trust the weekly trend.`
+    : `Drinks days barely move your scale — ${fmtSigned(avg)} kg on average over the following three days (${samples.length} samples).`;
+}
+
+function insightsCardHTML() {
+  const items = [insightWins(), insightDrinks()].filter(Boolean);
+  if (!items.length) return "";
+  return `<div class="section-title"><span>Insights</span></div>
+    <div class="chart-card" id="insights-card">
+      ${items.map(x => `<div class="wu-none" style="margin-top: 4px;">💡 ${x}</div>`).join("")}
+    </div>`;
 }
 
 /* ================= reminders ================= */
