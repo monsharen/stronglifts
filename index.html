@@ -337,9 +337,10 @@
   .tabbar {
     position: fixed; z-index: 20; left: 0; right: 0; bottom: 0;
     display: flex; justify-content: space-around;
-    background: rgba(22, 22, 24, .92);
-    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(84, 84, 88, .35);
+    background: rgba(16, 16, 18, .55);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    backdrop-filter: blur(28px) saturate(180%);
+    border-top: 1px solid rgba(255, 255, 255, .08);
     padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
   }
   .tabbar button {
