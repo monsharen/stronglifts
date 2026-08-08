@@ -453,6 +453,53 @@
   .pr-card .pr-title { font-weight: 700; font-size: 20px; color: var(--volt); }
   .pr-card .pr-lifts { font-size: 14px; margin-top: 3px; color: var(--dim); }
   .medal-shelf { font-size: 15px; letter-spacing: .15em; }
+
+  /* ---------- 3D medals ---------- */
+  .coin-scene { perspective: 700px; }
+  .coin3d { position: relative; transform-style: preserve-3d; transform: rotateX(12deg); cursor: pointer; touch-action: none; }
+  .coin3d.spin { animation: coin-spin 7s linear infinite; }
+  @keyframes coin-spin {
+    from { transform: rotateX(12deg) rotateY(0deg); }
+    to { transform: rotateX(12deg) rotateY(360deg); }
+  }
+  .coin3d .cface, .coin3d .cedge { position: absolute; inset: 0; border-radius: 50%; }
+  .coin3d .cface {
+    backface-visibility: hidden;
+    display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 32% 28%, var(--m1), var(--m2) 36%, var(--m3) 68%, var(--m4) 100%);
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .16), inset 0 0 24px rgba(0, 0, 0, .28);
+  }
+  .coin3d .cface::before {
+    content: ""; position: absolute; inset: 9%; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, .22);
+    box-shadow: inset 0 1px 6px rgba(0, 0, 0, .3);
+  }
+  .coin3d .cface span {
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .45));
+    transform: translateZ(1px);
+  }
+  .coin3d .cface.back span { color: var(--m4); font-weight: 800; letter-spacing: .02em; text-shadow: 0 1px 0 rgba(255, 255, 255, .35); filter: none; }
+  .coin3d .cedge { background: radial-gradient(circle, var(--m3) 55%, var(--m4) 100%); }
+  .coin3d.gold { --m1: #fff3b8; --m2: #f2ca4c; --m3: #c8992a; --m4: #7a5c10; }
+  .coin3d.silver { --m1: #ffffff; --m2: #d9dde3; --m3: #a2aab6; --m4: #565e6a; }
+  .coin3d.bronze { --m1: #ffd9b0; --m2: #d99a5b; --m3: #a86a33; --m4: #5e3a17; }
+  .coin3d.locked { --m1: #55555a; --m2: #3f3f44; --m3: #313136; --m4: #212124; }
+  .coin3d.locked .cface span { opacity: .55; }
+  .showcase {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0, 0, 0, .72);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sc-inner { text-align: center; padding: 24px; }
+  .sc-inner .coin-scene { margin: 0 auto; }
+  .sc-name { font-size: 22px; font-weight: 700; margin-top: 26px; letter-spacing: -.01em; }
+  .sc-desc { color: var(--dim); font-size: 14px; margin-top: 4px; }
+  .sc-hint { color: var(--dim-2); font-size: 11px; margin-top: 18px; }
+  .ach { cursor: pointer; }
+  .ach:active { background: var(--panel-2); }
+  .coin-row { display: flex; align-items: center; gap: 18px; padding: 4px 2px 10px; }
+  .coin-row .coin-info { flex: 1; }
   .ach-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .ach {
     background: var(--panel); border-radius: 12px;
@@ -2078,6 +2125,73 @@ function weeklyPoints() {
 
 const MEDALS = [{ pts: 100, icon: "🥇" }, { pts: 60, icon: "🥈" }, { pts: 30, icon: "🥉" }];
 const medalFor = p => (MEDALS.find(m => p >= m.pts) || {}).icon || null;
+const MEDAL_TIER = { "🥇": "gold", "🥈": "silver", "🥉": "bronze" };
+
+/* ---------- 3D medal coins: CSS transforms, no libraries ---------- */
+
+function coinHTML(tier, glyph, size, opts = {}) {
+  const T = Math.max(6, size * 0.09); // coin thickness
+  const N = 6;
+  const edges = [];
+  for (let i = 0; i <= N; i++)
+    edges.push(`<div class="cedge" style="transform: translateZ(${(-T / 2 + T * i / N).toFixed(1)}px);"></div>`);
+  return `<div class="coin-scene" style="width:${size}px;height:${size}px;">
+    <div class="coin3d ${tier} spin" ${opts.id ? `id="${opts.id}"` : ""} ${opts.onclick ? `onclick="${opts.onclick}"` : ""} style="width:${size}px;height:${size}px;">
+      ${edges.join("")}
+      <div class="cface front" style="transform: translateZ(${(T / 2).toFixed(1)}px);"><span style="font-size:${Math.round(size * 0.42)}px;">${glyph}</span></div>
+      <div class="cface back" style="transform: translateZ(${(-T / 2).toFixed(1)}px) rotateY(180deg);"><span style="font-size:${Math.round(size * 0.3)}px;">HL</span></div>
+    </div>
+  </div>`;
+}
+
+/* Drag to rotate: pauses the idle spin, clamps tilt, follows the finger */
+function coinDragInit(el) {
+  let rx = 12, ry = 0, start = null;
+  el.addEventListener("pointerdown", e => {
+    el.classList.remove("spin");
+    start = { x: e.clientX, y: e.clientY, rx, ry };
+    el.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  el.addEventListener("pointermove", e => {
+    if (!start) return;
+    ry = start.ry + (e.clientX - start.x) * 0.6;
+    rx = Math.max(-45, Math.min(45, start.rx - (e.clientY - start.y) * 0.4));
+    el.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+  });
+  el.addEventListener("pointerup", () => { start = null; });
+  el.addEventListener("pointercancel", () => { start = null; });
+}
+
+function showcase(tier, glyph, name, desc) {
+  const overlay = document.createElement("div");
+  overlay.className = "showcase";
+  overlay.innerHTML = `<div class="sc-inner">
+    ${coinHTML(tier, glyph, 190, { id: "sc-coin" })}
+    <div class="sc-name">${name}</div>
+    <div class="sc-desc">${desc}</div>
+    <div class="sc-hint">drag the medal to rotate · tap outside to close</div>
+  </div>`;
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  coinDragInit(overlay.querySelector("#sc-coin"));
+  armAudio();
+  chime("win");
+}
+
+function showAward(i) {
+  const a = ACHIEVEMENTS[i];
+  const got = a.test(achCtx());
+  showcase(got ? "gold" : "locked", got ? a.icon : "🔒", a.name, got ? a.desc : `Locked — ${a.desc.toLowerCase()}`);
+}
+
+function showWeekMedal() {
+  const pts = weeklyPoints()[weekKeyOf(new Date())] || 0;
+  const medal = medalFor(pts);
+  showcase(medal ? MEDAL_TIER[medal] : "locked", "★",
+    medal ? `${medal === "🥇" ? "Gold" : medal === "🥈" ? "Silver" : "Bronze"} week` : "No medal yet",
+    `${pts} points this week — workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}`);
+}
 
 function progressCardHTML() {
   const weeks = weeklyPoints();
@@ -2101,11 +2215,16 @@ function progressCardHTML() {
   <div class="chart-card">
     <div class="chart-head">
       <h3>Medals</h3>
-      <span class="cur">${medal || "—"}<span class="best">this week</span></span>
+      <span class="cur"><span class="best">this week</span></span>
+    </div>
+    <div class="coin-row">
+      ${coinHTML(medal ? MEDAL_TIER[medal] : "locked", "★", 76, { onclick: "showWeekMedal()" })}
+      <div class="coin-info">
+        <div class="wu-none">${weekLine}</div>
+        <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
+      </div>
     </div>
     ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-bottom: 6px;">🎰 Mystery ×2 day — a ⭐ logged today counts double toward this week's medal.</div>` : ""}
-    <div class="wu-none">${weekLine}</div>
-    <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
     <div class="wu-none" style="margin-top: 6px;">Points: workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}.</div>
     ${chestsReady() > 0
       ? `<button class="btn btn-volt" style="font-size: 17px; padding: 12px;" onclick="openChest()">🎁 Open win chest${chestsReady() > 1 ? ` (${chestsReady()} ready)` : ""}</button>`
@@ -2182,9 +2301,9 @@ const ACHIEVEMENTS = [
 
 function awardsHTML() {
   const ctx = achCtx();
-  const cells = ACHIEVEMENTS.map(a => {
+  const cells = ACHIEVEMENTS.map((a, i) => {
     const got = a.test(ctx);
-    return `<div class="ach ${got ? "got" : ""}">
+    return `<div class="ach ${got ? "got" : ""}" onclick="showAward(${i})">
       <div class="a-icon">${got ? a.icon : "🔒"}</div>
       <div class="a-name">${a.name}</div>
       <div class="a-desc">${a.desc}</div>
@@ -2193,7 +2312,7 @@ function awardsHTML() {
   const n = ACHIEVEMENTS.filter(a => a.test(ctx)).length;
   return `${appHeaderHTML("Awards", `<span class="tag">${n} / ${ACHIEVEMENTS.length}</span>`, true)}
     <div class="ach-grid">${cells}</div>
-    <div class="wu-none" style="margin-top: 12px;">Awards unlock themselves from your logs — nothing to claim, nothing to lose.</div>`;
+    <div class="wu-none" style="margin-top: 12px;">Awards unlock themselves from your logs — nothing to claim, nothing to lose. Tap a medal to inspect it.</div>`;
 }
 
 /* ================= body measurements app ================= */
