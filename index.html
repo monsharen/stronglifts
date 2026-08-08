@@ -942,7 +942,6 @@ function lifetimeVol() {
    crosses a milestone (lifetime tonne, level-up, weekly medal). */
 function juiceSnapshot() {
   return {
-    level: levelInfo().n,
     medal: medalFor(weeklyPoints()[weekKeyOf(new Date())] || 0),
     tonnes: Math.floor(lifetimeVol() / 1000),
   };
@@ -954,13 +953,8 @@ function juiceAfter(before) {
     confetti(60);
     kudos(`${after.tonnes} tonnes!`, `WOW — you've now lifted ${fmtVolume(Math.round(lifetimeVol()))} in your lifetime`);
   }
-  if (after.level > before.level) {
-    confetti(70);
-    chime("fanfare");
-    kudos("Level up!", `LVL ${after.level} · ${LEVELS[after.level - 1].title}`);
-  }
   if (after.medal && after.medal !== before.medal) {
-    kudos(`${after.medal} week!`, "weekly medal secured — see the shelf on your dashboard");
+    kudos(`${after.medal} week!`, "weekly medal secured — see the shelf on your summary");
   }
 }
 
@@ -1699,12 +1693,12 @@ function logBodyweight() {
   chime("tick");
   if (navigator.vibrate) navigator.vibrate(15);
   const delta = prevKg === null ? null : Math.round((entry.kg - prevKg) * 10) / 10;
-  const deltaTxt = delta === null ? "" : delta === 0 ? "same as last time · " : `${delta > 0 ? "+" : ""}${delta} kg vs last · `;
+  const deltaTxt = delta === null ? "" : delta === 0 ? "same as last time" : `${delta > 0 ? "+" : ""}${delta} kg vs last`;
   if (entry.kg < wasMin && bw.length >= 5) {
     celebrate(true);
-    kudos("New low!", `${fmtKg(entry.kg)} — lightest ever logged · +${XP.weighin} XP`);
+    kudos("New low!", `${fmtKg(entry.kg)} — lightest ever logged`);
   } else {
-    kudos("Logged!", `${deltaTxt}+${XP.weighin} XP`, true);
+    kudos("Logged!", deltaTxt || "first entry on the books", true);
   }
   juiceAfter(before);
   render();
@@ -1769,7 +1763,7 @@ function editMealDay(mutate) {
   if (secured && !wasSecured) {
     celebrate(Math.random() < 1 / 8);
     const left = cfg.budget - dayKcal(day, cfg);
-    kudos("⭐ Win day!", `dinner banked with ${left} kcal to spare${isBonusDay(todayKey()) ? " · 🎰 ×2 day — double XP!" : ""}`);
+    kudos("⭐ Win day!", `dinner banked with ${left} kcal to spare${isBonusDay(todayKey()) ? " · 🎰 counts double this week!" : ""}`);
   }
 }
 
@@ -1886,17 +1880,15 @@ function mealsHTML() {
         <button class="snack-btn ${day.sn ? "on" : ""}" onclick="tapSnack()">${day.sn || 0}</button>
       </div>
       <div class="wu-none" style="margin-top: 12px;">${statusLine}</div>
-      ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-top: 6px;">🎰 Mystery ×2 day — today's ⭐ is worth double XP.</div>` : ""}
+      ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-top: 6px;">🎰 Mystery ×2 day — today's ⭐ counts double toward this week's medal.</div>` : ""}
     </div>
     ${chart}
     ${hist}
     ${cfgCard}`;
 }
 
-/* ================= progress: XP, levels, weekly medals =================
-   XP is derived from logged data, never stored — history back-fills itself. */
-
-const XP = { weighin: 5, workout: 20, win: 15, combo: 10 };
+/* ================= progress: weekly medals & chests =================
+   Everything derives from logged data, never stored — history back-fills. */
 
 const parseDayKey = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
 
@@ -1909,30 +1901,22 @@ function hashStr(s) {
 }
 const isBonusDay = k => hashStr("hl" + k) % 8 === 0;
 
-function xpBreakdown() {
+function winCount() {
   const cfg = mealsCfg(), days = mealDays();
-  const winKeys = Object.keys(days).filter(k => dayKcal(days[k], cfg) <= cfg.budget);
-  const workoutDays = new Set(sessions().map(s => dayKeyOf(s.startedAt)));
-  const weighinDays = new Set(bodyweights().map(b => dayKeyOf(b.date)));
-  const combos = winKeys.filter(k => workoutDays.has(k) && weighinDays.has(k)).length;
-  const bonusWins = winKeys.filter(isBonusDay).length;
-  return { weighins: bodyweights().length, workouts: sessions().length, wins: winKeys.length, combos, bonusWins };
+  return Object.keys(days).filter(k => dayKcal(days[k], cfg) <= cfg.budget).length;
 }
 
 /* ---------- win chests: every 5 win days fills one ---------- */
 
 const chestState = () => store.load("sl.chests", { opened: 0, rewards: [] });
-const chestXP = () => chestState().rewards.reduce((s, r) => s + r.xp, 0);
-const chestsReady = () => Math.floor(xpBreakdown().wins / 5) - chestState().opened;
+const chestsReady = () => Math.floor(winCount() / 5) - chestState().opened;
 
 function openChest() {
   const chests = chestState();
-  if (Math.floor(xpBreakdown().wins / 5) <= chests.opened) return;
-  const xs = [25, 25, 25, 50, 50, 100];
+  if (Math.floor(winCount() / 5) <= chests.opened) return;
   const trophies = ["🏆", "🎖️", "🍾", "💎", "👑", "🦄", "🔥", "🚀", "🥂", "🧨"];
   const before = juiceSnapshot();
   const reward = {
-    xp: xs[Math.floor(Math.random() * xs.length)],
     trophy: trophies[Math.floor(Math.random() * trophies.length)],
     at: new Date().toISOString(),
   };
@@ -1940,31 +1924,9 @@ function openChest() {
   chests.rewards.push(reward);
   store.save("sl.chests", chests);
   celebrate(true);
-  kudos(`${reward.trophy} +${reward.xp} XP`, "chest opened — loot added to your shelf");
+  kudos(reward.trophy, "chest opened — loot added to your shelf");
   juiceAfter(before);
   render();
-}
-
-function totalXP() {
-  const b = xpBreakdown();
-  return b.weighins * XP.weighin + b.workouts * XP.workout + b.wins * XP.win
-    + b.bonusWins * XP.win /* mystery-day wins count double */
-    + b.combos * XP.combo + chestXP();
-}
-
-const LEVELS = [
-  { xp: 0, title: "Empty Bar" }, { xp: 60, title: "Plate Loader" }, { xp: 150, title: "5×5 Apprentice" },
-  { xp: 300, title: "Iron Novice" }, { xp: 500, title: "Barbell Regular" }, { xp: 750, title: "Plate Club" },
-  { xp: 1050, title: "Volume Merchant" }, { xp: 1400, title: "Deload Survivor" }, { xp: 1800, title: "Iron Viking" },
-  { xp: 2300, title: "Stronglifter" }, { xp: 2900, title: "Tonnage Tycoon" }, { xp: 3600, title: "Iron Legend" },
-];
-
-function levelInfo() {
-  const xp = totalXP();
-  let i = 0;
-  while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1].xp) i++;
-  const next = LEVELS[i + 1] || null;
-  return { n: i + 1, title: LEVELS[i].title, xp, cur: LEVELS[i].xp, next: next && next.xp };
 }
 
 /* Monday day-key of the week a date falls in */
@@ -1975,14 +1937,18 @@ function weekKeyOf(dateLike) {
   return dayKeyOf(d);
 }
 
+/* Weekly medal points; a win day on a 🎰 mystery day counts double */
+const MEDAL_PTS = { workout: 20, win: 15, weighin: 5 };
+const winPoints = k => MEDAL_PTS.win * (isBonusDay(k) ? 2 : 1);
+
 function weeklyPoints() {
   const pts = {};
   const add = (k, v) => { pts[k] = (pts[k] || 0) + v; };
-  for (const s of sessions()) add(weekKeyOf(s.startedAt), XP.workout);
-  for (const b of bodyweights()) add(weekKeyOf(b.date), XP.weighin);
+  for (const s of sessions()) add(weekKeyOf(s.startedAt), MEDAL_PTS.workout);
+  for (const b of bodyweights()) add(weekKeyOf(b.date), MEDAL_PTS.weighin);
   const cfg = mealsCfg(), days = mealDays();
   for (const k of Object.keys(days))
-    if (dayKcal(days[k], cfg) <= cfg.budget) add(weekKeyOf(parseDayKey(k)), XP.win);
+    if (dayKcal(days[k], cfg) <= cfg.budget) add(weekKeyOf(parseDayKey(k)), winPoints(k));
   return pts;
 }
 
@@ -1990,9 +1956,6 @@ const MEDALS = [{ pts: 100, icon: "🥇" }, { pts: 60, icon: "🥈" }, { pts: 30
 const medalFor = p => (MEDALS.find(m => p >= m.pts) || {}).icon || null;
 
 function progressCardHTML() {
-  const lv = levelInfo();
-  const span = lv.next ? lv.next - lv.cur : 1;
-  const pct = lv.next ? Math.min(100, Math.round((lv.xp - lv.cur) / span * 100)) : 100;
   const weeks = weeklyPoints();
   const thisWeek = weeks[weekKeyOf(new Date())] || 0;
   const medal = medalFor(thisWeek);
@@ -2009,22 +1972,22 @@ function progressCardHTML() {
     shelf.push(medalFor(weeks[weekKeyOf(d)] || 0) || "·");
   }
 
+  const wins = winCount();
   return `<div class="section-title"><span>Progress</span></div>
   <div class="chart-card">
     <div class="chart-head">
-      <h3>LVL ${lv.n} · ${lv.title}</h3>
-      <span class="cur">${lv.xp} XP<span class="best">${lv.next ? lv.next - lv.xp + " to next" : "max level"}</span></span>
+      <h3>Medals</h3>
+      <span class="cur">${medal || "—"}<span class="best">this week</span></span>
     </div>
-    <div class="cal-bar"><div class="cal-fill" style="width: ${pct}%"></div></div>
-    ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-bottom: 6px;">🎰 Mystery ×2 day — a ⭐ logged today is worth double XP.</div>` : ""}
+    ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-bottom: 6px;">🎰 Mystery ×2 day — a ⭐ logged today counts double toward this week's medal.</div>` : ""}
     <div class="wu-none">${weekLine}</div>
     <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
-    <div class="wu-none" style="margin-top: 6px;">Workout +${XP.workout} · win day +${XP.win} · weigh-in +${XP.weighin} · all three in one day +${XP.combo}</div>
+    <div class="wu-none" style="margin-top: 6px;">Points: workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}.</div>
     ${chestsReady() > 0
-      ? `<button class="btn btn-volt" style="font-size: 18px; padding: 12px;" onclick="openChest()">🎁 Open win chest${chestsReady() > 1 ? ` (${chestsReady()} ready)` : ""}</button>`
-      : `<div class="wu-none" style="margin-top: 6px;">🎁 Next win chest at ${(Math.floor(xpBreakdown().wins / 5) + 1) * 5} win days — you have ${xpBreakdown().wins}.</div>`}
+      ? `<button class="btn btn-volt" style="font-size: 17px; padding: 12px;" onclick="openChest()">🎁 Open win chest${chestsReady() > 1 ? ` (${chestsReady()} ready)` : ""}</button>`
+      : `<div class="wu-none" style="margin-top: 6px;">🎁 Next win chest at ${(Math.floor(wins / 5) + 1) * 5} win days — you have ${wins}.</div>`}
     ${chestState().rewards.length
-      ? `<div class="wu-none" style="margin-top: 6px;">Chest loot: <span class="medal-shelf">${chestState().rewards.map(r => r.trophy).join(" ")}</span> (+${chestXP()} XP)</div>`
+      ? `<div class="wu-none" style="margin-top: 6px;">Chest loot: <span class="medal-shelf">${chestState().rewards.map(r => r.trophy).join(" ")}</span></div>`
       : ""}
     <div class="tog-row" onclick="navigate('#/awards')" style="margin-top: 8px;">
       <span class="t-name">🏆 Awards</span>
@@ -2283,7 +2246,7 @@ function finishSession() {
   draft = null;
   if (prs.length) { prBanner = prs; celebrate(true); }
   else celebrate(false);
-  kudos("Workout done!", `${fmtVolume(Math.round(sessVol))} this session · ${fmtVolume(Math.round(lifetimeVol()))} lifetime · +${XP.workout} XP`);
+  kudos("Workout done!", `${fmtVolume(Math.round(sessVol))} this session · ${fmtVolume(Math.round(lifetimeVol()))} lifetime`);
   juiceAfter(before);
   navigate("#/stronglifts");
 }
