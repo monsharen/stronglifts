@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "hl-v5";
+const CACHE = "hl-v6";
 const PRECACHE = [
   "./",
   "./index.html",
