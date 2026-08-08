@@ -1453,7 +1453,6 @@ async function exportData() {
     raceStart: store.load("sl.raceStart", null),
     meals: mealDays(),
     mealsCfg: store.load("sl.mealsCfg", null),
-    chests: store.load("sl.chests", null),
     meas: measurements(),
   });
   try {
@@ -1517,7 +1516,6 @@ async function importData() {
     if (added) store.save("sl.meals", days);
   }
   if (data.mealsCfg && !localStorage.getItem("sl.mealsCfg")) store.save("sl.mealsCfg", data.mealsCfg);
-  if (data.chests && !localStorage.getItem("sl.chests")) store.save("sl.chests", data.chests);
 
   if (Array.isArray(data.meas)) {
     const ms = measurements();
@@ -2070,7 +2068,7 @@ function mealsHTML() {
     ${cfgCard}`;
 }
 
-/* ================= progress: weekly medals & chests =================
+/* ================= progress: weekly medals =================
    Everything derives from logged data, never stored — history back-fills. */
 
 const parseDayKey = k => { const [y, m, d] = k.split("-").map(Number); return new Date(y, m - 1, d); };
@@ -2087,29 +2085,6 @@ const isBonusDay = k => hashStr("hl" + k) % 8 === 0;
 function winCount() {
   const cfg = mealsCfg(), days = mealDays();
   return Object.keys(days).filter(k => dayKcal(days[k], cfg) <= cfg.budget).length;
-}
-
-/* ---------- win chests: every 5 win days fills one ---------- */
-
-const chestState = () => store.load("sl.chests", { opened: 0, rewards: [] });
-const chestsReady = () => Math.floor(winCount() / 5) - chestState().opened;
-
-function openChest() {
-  const chests = chestState();
-  if (Math.floor(winCount() / 5) <= chests.opened) return;
-  const trophies = ["🏆", "🎖️", "🍾", "💎", "👑", "🦄", "🔥", "🚀", "🥂", "🧨"];
-  const before = juiceSnapshot();
-  const reward = {
-    trophy: trophies[Math.floor(Math.random() * trophies.length)],
-    at: new Date().toISOString(),
-  };
-  chests.opened++;
-  chests.rewards.push(reward);
-  store.save("sl.chests", chests);
-  celebrate(true);
-  kudos(reward.trophy, "chest opened — loot added to your shelf");
-  juiceAfter(before);
-  render();
 }
 
 /* Monday day-key of the week a date falls in */
@@ -2258,13 +2233,7 @@ function progressCardHTML() {
       </div>
     </div>
     ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-bottom: 6px;">🎰 Mystery ×2 day — a ⭐ logged today counts double toward this week's medal.</div>` : ""}
-    <div class="wu-none" style="margin-top: 6px;">Points: workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}.</div>
-    ${chestsReady() > 0
-      ? `<button class="btn btn-volt" style="font-size: 17px; padding: 12px;" onclick="openChest()">🎁 Open win chest${chestsReady() > 1 ? ` (${chestsReady()} ready)` : ""}</button>`
-      : `<div class="wu-none" style="margin-top: 6px;">🎁 Next win chest at ${(Math.floor(wins / 5) + 1) * 5} win days — you have ${wins}.</div>`}
-    ${chestState().rewards.length
-      ? `<div class="wu-none" style="margin-top: 6px;">Chest loot: <span class="medal-shelf">${chestState().rewards.map(r => r.trophy).join(" ")}</span></div>`
-      : ""}
+    <div class="wu-none" style="margin-top: 6px;">Points: workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin} · ${wins} ⭐ win days total.</div>
     <div class="tog-row" onclick="navigate('#/awards')" style="margin-top: 8px;">
       <span class="t-name">🏆 Awards</span>
       <span class="t-sub">${ACHIEVEMENTS.filter(a => a.test(achCtx())).length} / ${ACHIEVEMENTS.length} unlocked →</span>
