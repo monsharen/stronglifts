@@ -554,12 +554,14 @@ const TAB_ICONS = {
   barbell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8.5 12h7"/><rect x="4.5" y="7.5" width="3" height="9" rx="1.2"/><rect x="16.5" y="7.5" width="3" height="9" rx="1.2"/><path d="M2 12h1.5M20.5 12H22"/></svg>`,
   scale: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5.5"/><path d="M12 10.5l2.8-2.8"/></svg>`,
   meals: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 3v5.5M4.5 3v3.5a2.5 2.5 0 0 0 5 0V3M7 11v10"/><path d="M16.5 3c1.8 2.2 1.8 6.3 0 8.5V21"/></svg>`,
+  ruler: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="8.5" width="18" height="7" rx="2"/><path d="M7.5 8.5v3.5M12 8.5v3.5M16.5 8.5v3.5"/></svg>`,
 };
 const TABS = [
   { route: "#/", label: "Summary", icon: TAB_ICONS.rings, match: h => h === "#/" || h === "#/awards" },
   { route: "#/stronglifts", label: "StrongLifts", icon: TAB_ICONS.barbell, match: h => h.startsWith("#/stronglifts") },
   { route: "#/weight", label: "Weight", icon: TAB_ICONS.scale, match: h => h === "#/weight" },
   { route: "#/meals", label: "Meals", icon: TAB_ICONS.meals, match: h => h === "#/meals" },
+  { route: "#/body", label: "Body", icon: TAB_ICONS.ruler, match: h => h === "#/body" },
 ];
 
 function tabbarHTML() {
@@ -571,7 +573,7 @@ function tabbarHTML() {
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight", "#/meals", "#/awards"];
+const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/weight", "#/meals", "#/body", "#/awards"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   return ROUTES.includes(h) ? h : "#/";
@@ -627,6 +629,7 @@ function render() {
     : route === "#/stronglifts/stats" ? statsHTML()
     : route === "#/weight" ? weightHTML()
     : route === "#/meals" ? mealsHTML()
+    : route === "#/body" ? bodyHTML()
     : route === "#/awards" ? awardsHTML()
     : dashHTML()
   ) + tabbarHTML();
@@ -1331,8 +1334,17 @@ function dashHTML() {
     ${mealPts.length > 1 ? chartSVG(mealPts, -1, w => w, null, "#ff9f0a") : ""}
   </div>` : "";
 
-  const analytics = (lifted || logged || calories)
-    ? lifted + logged + calories
+  const waistPts = measSeries("waist");
+  const waist = waistPts.length ? `<div class="chart-card tap" onclick="navigate('#/body')">
+    <div class="chart-head">
+      <h3 style="color:#bf5af2;">Waist</h3>
+      <span class="cur">${waistPts[waistPts.length - 1].weight} cm<span class="best">${fmtDelta(seriesChange(waistPts, 30))} in 30 days</span><span class="card-chev">›</span></span>
+    </div>
+    ${waistPts.length > 1 ? chartSVG(waistPts, -1, w => w, null, "#bf5af2") : ""}
+  </div>` : "";
+
+  const analytics = (lifted || logged || calories || waist)
+    ? lifted + logged + calories + waist
     : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts, a weigh-in in Weight or a meal in Meals, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
@@ -1382,6 +1394,7 @@ async function exportData() {
     meals: mealDays(),
     mealsCfg: store.load("sl.mealsCfg", null),
     chests: store.load("sl.chests", null),
+    meas: measurements(),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -1445,6 +1458,19 @@ async function importData() {
   }
   if (data.mealsCfg && !localStorage.getItem("sl.mealsCfg")) store.save("sl.mealsCfg", data.mealsCfg);
   if (data.chests && !localStorage.getItem("sl.chests")) store.save("sl.chests", data.chests);
+
+  if (Array.isArray(data.meas)) {
+    const ms = measurements();
+    const seenMs = new Set(ms.map(m => m.date));
+    let addedMs = 0;
+    for (const m of data.meas) {
+      if (m && m.date && !seenMs.has(m.date)) { ms.push(m); addedMs++; }
+    }
+    if (addedMs) {
+      ms.sort((a, b) => new Date(a.date) - new Date(b.date));
+      store.save("sl.meas", ms);
+    }
+  }
 
   render();
   alert(`Import complete: ${addedSessions} new session${addedSessions === 1 ? "" : "s"}, ${addedBw} new bodyweight entr${addedBw === 1 ? "y" : "ies"}.`);
@@ -2160,6 +2186,113 @@ function awardsHTML() {
   return `${appHeaderHTML("Awards", `<span class="tag">${n} / ${ACHIEVEMENTS.length}</span>`, true)}
     <div class="ach-grid">${cells}</div>
     <div class="wu-none" style="margin-top: 12px;">Awards unlock themselves from your logs — nothing to claim, nothing to lose.</div>`;
+}
+
+/* ================= body measurements app ================= */
+
+const MEAS_FIELDS = [
+  { key: "waist", name: "Waist" }, { key: "chest", name: "Chest" },
+  { key: "arm", name: "Arm" }, { key: "thigh", name: "Thigh" },
+];
+const measurements = () => store.load("sl.meas", []); // oldest first, sparse fields
+const measPickKey = () => store.load("sl.measPick", "waist");
+function measPick(k) { store.save("sl.measPick", k); render(); }
+
+function measSeries(key) {
+  return measurements().filter(m => m[key] != null).map(m => ({ weight: m[key], ok: true, date: m.date }));
+}
+
+/* Change vs the last point at least `days` older than the newest */
+function seriesChange(pts, days) {
+  if (!pts.length) return null;
+  const cutoff = new Date(pts[pts.length - 1].date).getTime() - days * 86400000;
+  let base = null;
+  for (const p of pts) {
+    if (new Date(p.date).getTime() <= cutoff) base = p;
+    else break;
+  }
+  return base ? Math.round((pts[pts.length - 1].weight - base.weight) * 10) / 10 : null;
+}
+
+function logMeasurements() {
+  const vals = {};
+  let any = false;
+  for (const f of MEAS_FIELDS) {
+    const v = parseFloat(String(document.getElementById("ms-" + f.key).value).replace(",", "."));
+    if (!isNaN(v) && v > 0) { vals[f.key] = Math.round(v * 10) / 10; any = true; }
+  }
+  if (!any) return;
+  const ms = measurements();
+  const now = new Date().toISOString();
+  if (ms.length && new Date(ms[ms.length - 1].date).toDateString() === new Date(now).toDateString())
+    Object.assign(ms[ms.length - 1], vals, { date: now });
+  else ms.push({ date: now, ...vals });
+  store.save("sl.meas", ms);
+  armAudio();
+  chime("tick");
+  kudos("Measured!", MEAS_FIELDS.filter(f => vals[f.key]).map(f => `${f.name} ${vals[f.key]}`).join(" · "), true);
+  render();
+}
+
+function deleteMeasEntry(idx) {
+  const ms = measurements();
+  if (!ms[idx] || !confirm(`Remove the entry from ${fmtDate(ms[idx].date)}?`)) return;
+  ms.splice(idx, 1);
+  store.save("sl.meas", ms);
+  render();
+}
+
+function bodyHTML() {
+  const ms = measurements();
+  const pick = measPickKey();
+  const pts = measSeries(pick);
+  const header = appHeaderHTML("Body", `<span class="tag">measurements</span>`);
+  const form = `<div class="cfg-grid" style="grid-template-columns: 1fr 1fr;">
+      ${MEAS_FIELDS.map(f => `<div class="cfg-item"><label>${f.name} cm</label><input inputmode="decimal" id="ms-${f.key}" placeholder="–"></div>`).join("")}
+    </div>
+    <div class="data-actions"><button onclick="logMeasurements()">Log measurements</button></div>`;
+
+  if (!ms.length) {
+    return `${header}
+      <div class="chart-card">
+        <div class="wu-none">Tape-measure tracking — waist is the body-composition signal BMI can't give a lifter. Log any subset, weekly is plenty; logging again the same day updates that day's entry.</div>
+        ${form}
+      </div>`;
+  }
+
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${pts.length ? pts[pts.length - 1].weight : "–"}</div><div class="lbl">${MEAS_FIELDS.find(f => f.key === pick).name} cm</div></div>
+    <div class="tile"><div class="num">${fmtDelta(seriesChange(pts, 30))}</div><div class="lbl">30 days</div></div>
+    <div class="tile"><div class="num">${ms.length}</div><div class="lbl">Entries</div></div>
+  </div>`;
+
+  const picker = `<div class="data-actions" style="margin-top: 0; margin-bottom: 10px;">${MEAS_FIELDS.map(f =>
+    `<button class="${f.key === pick ? "active" : ""}" onclick="measPick('${f.key}')">${f.name}</button>`).join("")}</div>`;
+
+  const chart = `<div class="chart-card">
+      ${picker}
+      ${pts.length > 1
+        ? chartSVG(pts, -1, w => w, null, "#bf5af2") + `<div class="chart-dates">
+            <span>${fmtDate(pts[0].date)}</span><span>${pts.length} entries</span><span>${fmtDate(pts[pts.length - 1].date)}</span>
+          </div>`
+        : `<div class="wu-none">Log ${pts.length ? "a second" : "a"} ${pick} measurement to see the trend.</div>`}
+      ${form}
+    </div>`;
+
+  const rows = ms.slice(-10).reverse().map(m => {
+    const idx = ms.indexOf(m);
+    const parts = MEAS_FIELDS.filter(f => m[f.key] != null).map(f => `${f.name[0]} ${m[f.key]}`);
+    return `<div class="hist-row">
+      <span>${parts.join(" · ")}</span>
+      <span class="reps">${fmtDate(m.date)} <button class="hist-del" onclick="deleteMeasEntry(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
+    </div>`;
+  }).join("");
+
+  return `${header}
+    ${tiles}
+    ${chart}
+    <div class="section-title"><span>Entries</span><span>${ms.length} total${ms.length > 10 ? " · showing last 10" : ""}</span></div>
+    <div class="hist-card">${rows}</div>`;
 }
 
 /* ================= reminders ================= */
