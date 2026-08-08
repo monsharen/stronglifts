@@ -580,6 +580,7 @@ let route = parseRoute(location.hash);
 if (draft && route === "#/") route = "#/stronglifts"; // resume mid-workout on open
 
 function navigate(r) {
+  if (r !== "#/meals") mealsYesterday = false;
   if (location.hash === r) { route = r; render(); window.scrollTo(0, 0); }
   else location.hash = r;
 }
@@ -606,7 +607,6 @@ function saveDraft() { store.save("sl.draft", draft); }
 /* ================= rendering ================= */
 
 const app = document.getElementById("app");
-const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const fmtKg = w => (w % 1 === 0 ? w : w.toFixed(1)) + " kg";
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const fmtClock = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
@@ -909,6 +909,7 @@ const kudosQueue = [];
 let kudosActive = false;
 
 function kudos(main, sub = "", small = false) {
+  if (small && kudosQueue.length >= 3) return; // rapid taps shouldn't build a parade
   kudosQueue.push({ main, sub, small });
   pumpKudos();
 }
@@ -1357,13 +1358,15 @@ async function exportData() {
     sessions: sessions(),
     bw: bodyweights(),
     height: heightCm(),
+    goal: goalKg(),
+    raceStart: store.load("sl.raceStart", null),
     meals: mealDays(),
     mealsCfg: store.load("sl.mealsCfg", null),
     chests: store.load("sl.chests", null),
   });
   try {
     await navigator.clipboard.writeText(payload);
-    alert("Backup copied to clipboard.\n\nOpen the app in the other browser, go to Stats and tap Import backup.");
+    alert("Backup copied to clipboard.\n\nOpen the app in the other browser, go to Summary and tap Import backup.");
   } catch {
     prompt("Clipboard unavailable — copy this backup text manually:", payload);
   }
@@ -1410,6 +1413,8 @@ async function importData() {
   store.save("sl.bw", bw);
 
   if (typeof data.height === "number" && !heightCm()) store.save("sl.height", data.height);
+  if (typeof data.goal === "number" && !goalKg()) store.save("sl.goal", data.goal);
+  if (typeof data.raceStart === "string" && !localStorage.getItem("sl.raceStart")) store.save("sl.raceStart", data.raceStart);
 
   if (data.meals && typeof data.meals === "object") {
     const days = mealDays();
@@ -1444,6 +1449,42 @@ function saveHeight() {
   if (isNaN(h) || h < 50 || h > 250) { inp.focus(); return; }
   store.save("sl.height", Math.round(h));
   render();
+}
+
+const goalKg = () => store.load("sl.goal", null);
+
+function saveGoal() {
+  const inp = document.getElementById("goal-input");
+  const g = parseFloat(String(inp.value).replace(",", "."));
+  if (isNaN(g) || g <= 0) { inp.focus(); return; }
+  store.save("sl.goal", Math.round(g * 10) / 10);
+  render();
+}
+
+/* Goal, pace over the trailing ~4 weeks, and a projected arrival date */
+function goalCardHTML(bw) {
+  const goal = goalKg();
+  if (!goal || !bw.length) return "";
+  const cur = bw[bw.length - 1].kg;
+  const left = Math.round((cur - goal) * 10) / 10;
+  const d28 = bwChange(bw, 28);
+  const pace = d28 === null ? null : Math.round(d28 / 4 * 100) / 100; // kg/week
+  let eta;
+  if (left <= 0) eta = "Goal reached — you're in maintenance territory. 🎉";
+  else if (pace === null) eta = "Log a few more weeks of weigh-ins to project an arrival date.";
+  else if (pace >= -0.05) eta = "No downward trend right now — the ETA needs a losing pace. Tomorrow is a fresh day.";
+  else {
+    const weeks = left / -pace;
+    const dt = new Date(Date.now() + weeks * 7 * 86400000);
+    eta = `≈ ${Math.round(weeks)} week${Math.round(weeks) === 1 ? "" : "s"} at this pace — around ${dt.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}.`;
+  }
+  return `<div class="chart-card">
+    <div class="chart-head">
+      <h3 style="color:#0a84ff;">Goal ${fmtKg(goal)}</h3>
+      <span class="cur">${left > 0 ? left + " kg left" : "reached 🎉"}<span class="best">${pace !== null ? (pace > 0 ? "+" : "") + pace + " kg/week" : "pace –"}</span></span>
+    </div>
+    <div class="wu-none">${eta}</div>
+  </div>`;
 }
 
 /* Change vs the last entry at least `days` days older than the newest; null if history is shorter */
@@ -1516,9 +1557,19 @@ function ghostSeries(g) {
   }));
 }
 
-/* Your current run: day 0 = first logged weigh-in */
+/* Your current run: day 0 = first weigh-in of the run. Starting a new run
+   makes the race restart from the next weigh-in — regimes get restarted. */
+const raceStart = () => store.load("sl.raceStart", null);
+
+function startNewRun() {
+  if (!confirm("Start a new run? The ghost race resets — your next weigh-in becomes day 0. History stays untouched.")) return;
+  store.save("sl.raceStart", new Date().toISOString());
+  render();
+}
+
 function raceCurSeries() {
-  const bw = bodyweights();
+  const rs = raceStart();
+  const bw = rs ? bodyweights().filter(b => b.date >= rs) : bodyweights();
   if (bw.length < 2) return [];
   const t0 = new Date(bw[0].date).getTime();
   return bw.map(b => ({
@@ -1599,6 +1650,7 @@ function raceCardHTML() {
       </div>
       <div class="wu-none" style="margin-top: 8px;">${status} Day 0 is each run's first weigh-in; the y-axis is kg lost since then.</div>
       <div class="data-actions">${picker}</div>
+      <button class="hist-del" onclick="startNewRun()">start a new run</button>
     </div>`;
 }
 
@@ -1612,10 +1664,15 @@ function weightHTML() {
     </div>`;
   const profile = `<div class="section-title"><span>Profile</span></div>
     <div class="chart-card">
-      <div class="wu-none">${h ? `Height ${h} cm — used to compute BMI from your latest weigh-in.` : "Set your height to see BMI here and on the dashboard."}</div>
+      <div class="wu-none">${h ? `Height ${h} cm — used to compute BMI from your latest weigh-in.` : "Set your height to see BMI here and on the summary."}</div>
       <div class="bw-form">
         <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="height-input" placeholder="cm" value="${h ?? ""}">
         <button onclick="saveHeight()">Save height</button>
+      </div>
+      <div class="wu-none" style="margin-top: 12px;">${goalKg() ? `Goal weight ${fmtKg(goalKg())} — drawn on the trend chart with pace and ETA above.` : "Set a goal weight to see kg left, your kg/week pace and a projected arrival date."}</div>
+      <div class="bw-form">
+        <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="goal-input" placeholder="goal kg" value="${goalKg() ?? ""}">
+        <button onclick="saveGoal()">Save goal</button>
       </div>
     </div>`;
 
@@ -1648,7 +1705,7 @@ function weightHTML() {
   if (recentDrinks) notes.push("Drinks were logged recently: the scale may swing up and down for a few days before it settles — trust the weekly trend, not today's number.");
   const chart = `<div class="chart-card">
       ${pts.length > 1
-        ? chartSVG(pts, -1, w => w, null, "#0a84ff") + `<div class="chart-dates">
+        ? chartSVG(pts, -1, w => w, goalKg() ? pts.map(() => ({ weight: goalKg() })) : null, "#0a84ff") + `<div class="chart-dates">
             <span>${fmtDate(pts[0].date)}</span>
             <span>${pts.length} entries</span>
             <span>${fmtDate(pts[pts.length - 1].date)}</span>
@@ -1668,6 +1725,7 @@ function weightHTML() {
 
   return `${header}
     ${tiles}
+    ${goalCardHTML(bw)}
     ${chart}
     ${raceCardHTML()}
     <div class="section-title"><span>Entries</span><span>${bw.length} total${bw.length > 14 ? " · showing last 14" : ""}</span></div>
@@ -1694,7 +1752,11 @@ function logBodyweight() {
   if (navigator.vibrate) navigator.vibrate(15);
   const delta = prevKg === null ? null : Math.round((entry.kg - prevKg) * 10) / 10;
   const deltaTxt = delta === null ? "" : delta === 0 ? "same as last time" : `${delta > 0 ? "+" : ""}${delta} kg vs last`;
-  if (entry.kg < wasMin && bw.length >= 5) {
+  const goal = goalKg();
+  if (goal && entry.kg <= goal && (prevKg === null || prevKg > goal)) {
+    celebrate(true);
+    kudos("🎉 Goal!", `${fmtKg(entry.kg)} — you made it to ${fmtKg(goal)}`);
+  } else if (entry.kg < wasMin && bw.length >= 5) {
     celebrate(true);
     kudos("New low!", `${fmtKg(entry.kg)} — lightest ever logged`);
   } else {
@@ -1748,8 +1810,13 @@ function mealsSeries() {
   });
 }
 
+/* Sporadic logging is expected — so yesterday stays editable for backfill */
+let mealsYesterday = false;
+const mealsKey = () => mealsYesterday ? dayKeyOf(new Date(Date.now() - 86400000)) : todayKey();
+function mealsPick(y) { mealsYesterday = y; render(); }
+
 function editMealDay(mutate) {
-  const days = mealDays(), t = todayKey();
+  const days = mealDays(), t = mealsKey();
   const day = days[t] || {};
   const cfg = mealsCfg();
   const wasSecured = !!day.d && dayKcal(day, cfg) <= cfg.budget;
@@ -1763,7 +1830,7 @@ function editMealDay(mutate) {
   if (secured && !wasSecured) {
     celebrate(Math.random() < 1 / 8);
     const left = cfg.budget - dayKcal(day, cfg);
-    kudos("⭐ Win day!", `dinner banked with ${left} kcal to spare${isBonusDay(todayKey()) ? " · 🎰 counts double this week!" : ""}`);
+    kudos("⭐ Win day!", `dinner banked with ${left} kcal to spare${isBonusDay(mealsKey()) ? " · 🎰 counts double this week!" : ""}`);
   }
 }
 
@@ -1802,7 +1869,7 @@ function drinkDayKeys() {
 function mealsHTML() {
   const cfg = mealsCfg();
   const days = mealDays();
-  const day = days[todayKey()] || {};
+  const day = days[mealsKey()] || {};
   const kcal = dayKcal(day, cfg);
   const left = cfg.budget - kcal;
   const logged = Object.values(day).some(v => v);
@@ -1869,8 +1936,12 @@ function mealsHTML() {
     ${tiles}
     <div class="chart-card">
       <div class="chart-head">
-        <h3>Today</h3>
+        <h3>${mealsYesterday ? "Yesterday" : "Today"}</h3>
         <span class="cur">${kcal} / ${cfg.budget} kcal</span>
+      </div>
+      <div class="data-actions" style="margin-top: 0; margin-bottom: 10px;">
+        <button class="${mealsYesterday ? "" : "active"}" onclick="mealsPick(false)">Today</button>
+        <button class="${mealsYesterday ? "active" : ""}" onclick="mealsPick(true)">Yesterday</button>
       </div>
       <div class="cal-num ${level}">${Math.abs(left)}<span class="cal-lbl">kcal ${left >= 0 ? "left" : "over"}</span></div>
       <div class="cal-bar"><div class="cal-fill ${level}" style="width: ${pct}%"></div></div>
@@ -1880,7 +1951,7 @@ function mealsHTML() {
         <button class="snack-btn ${day.sn ? "on" : ""}" onclick="tapSnack()">${day.sn || 0}</button>
       </div>
       <div class="wu-none" style="margin-top: 12px;">${statusLine}</div>
-      ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-top: 6px;">🎰 Mystery ×2 day — today's ⭐ counts double toward this week's medal.</div>` : ""}
+      ${!mealsYesterday && isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-top: 6px;">🎰 Mystery ×2 day — today's ⭐ counts double toward this week's medal.</div>` : ""}
     </div>
     ${chart}
     ${hist}
