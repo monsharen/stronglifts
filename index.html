@@ -711,6 +711,24 @@ function homeHTML() {
     ${histHTML}`;
 }
 
+/* Plates per side for a total on a standard 20 kg bar; null = not loadable */
+const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
+function plateBreakdown(total) {
+  let side = (total - 20) / 2;
+  if (side < 0) return null;
+  const out = [];
+  for (const p of PLATES) while (side >= p - 1e-9) { out.push(p); side -= p; }
+  return side > 1e-9 ? null : out;
+}
+
+function plateLineHTML(weight) {
+  if (weight < 20) return `<div class="hint" style="margin-top:-8px;">below the empty bar (20 kg)</div>`;
+  const plates = plateBreakdown(weight);
+  if (plates === null) return `<div class="hint" style="margin-top:-8px;">not loadable exactly with standard plates on a 20 kg bar</div>`;
+  if (!plates.length) return `<div class="hint" style="margin-top:-8px;">empty bar — no plates</div>`;
+  return `<div class="hint" style="margin-top:-8px;">per side: ${plates.join(" · ")} kg</div>`;
+}
+
 function sessionHTML() {
   const cards = draft.entries.map((e, i) => {
     const def = EXERCISES[e.ex];
@@ -738,6 +756,7 @@ function sessionHTML() {
         </div>
         <button onclick="bumpWeight(${i},2.5)" aria-label="increase">+</button>
       </div>
+      ${plateLineHTML(e.weight)}
       ${warmupHTML(e, i)}
       <div class="sub-label">Work sets · ${def.sets}×${def.reps}</div>
       <div class="sets ${def.sets === 1 ? "single" : ""}">${sets}</div>
