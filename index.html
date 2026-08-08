@@ -484,6 +484,17 @@
   .coin3d.silver { --m1: #ffffff; --m2: #d9dde3; --m3: #a2aab6; --m4: #565e6a; }
   .coin3d.bronze { --m1: #ffd9b0; --m2: #d99a5b; --m3: #a86a33; --m4: #5e3a17; }
   .coin3d.locked { --m1: #55555a; --m2: #3f3f44; --m3: #313136; --m4: #212124; }
+  .coin3d.sapphire { --m1: #bfe0ff; --m2: #4d9fff; --m3: #1d5fd0; --m4: #0c2f73; }
+  .coin3d.emerald { --m1: #c8ffd9; --m2: #4fd47f; --m3: #1f9a52; --m4: #0c4d28; }
+  .coin3d.amber { --m1: #ffe9b8; --m2: #ffb43a; --m3: #d07f14; --m4: #6e3f06; }
+  .coin3d.amethyst { --m1: #eed4ff; --m2: #bf5af2; --m3: #8a2fc0; --m4: #471263; }
+  .coin3d.obsidian { --m1: #9aa0ad; --m2: #4a4f5c; --m3: #23262e; --m4: #0b0c10; }
+  .coin3d.iron { --m1: #e2e8f0; --m2: #94a3b8; --m3: #5b6676; --m4: #2b323d; }
+  .showcase .coin-scene { animation: coin-drop .65s cubic-bezier(.2, 1.5, .4, 1); }
+  @keyframes coin-drop {
+    from { transform: translateY(-55vh) scale(.35); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
   .coin3d.locked .cface span { opacity: .55; }
   .showcase {
     position: fixed; inset: 0; z-index: 60;
@@ -1025,6 +1036,7 @@ function juiceAfter(before) {
   if (after.medal && after.medal !== before.medal) {
     kudos(`${after.medal} week!`, "weekly medal secured — see the shelf on your summary");
   }
+  checkNewAwards();
 }
 
 function startRest() {
@@ -2112,14 +2124,14 @@ function weekKeyOf(dateLike) {
 const MEDAL_PTS = { workout: 20, win: 15, weighin: 5 };
 const winPoints = k => MEDAL_PTS.win * (isBonusDay(k) ? 2 : 1);
 
-function weeklyPoints() {
+function weeklyPoints(cutoff = Infinity) {
   const pts = {};
   const add = (k, v) => { pts[k] = (pts[k] || 0) + v; };
-  for (const s of sessions()) add(weekKeyOf(s.startedAt), MEDAL_PTS.workout);
-  for (const b of bodyweights()) add(weekKeyOf(b.date), MEDAL_PTS.weighin);
+  for (const s of sessions()) if (new Date(s.startedAt) <= cutoff) add(weekKeyOf(s.startedAt), MEDAL_PTS.workout);
+  for (const b of bodyweights()) if (new Date(b.date) <= cutoff) add(weekKeyOf(b.date), MEDAL_PTS.weighin);
   const cfg = mealsCfg(), days = mealDays();
   for (const k of Object.keys(days))
-    if (dayKcal(days[k], cfg) <= cfg.budget) add(weekKeyOf(parseDayKey(k)), winPoints(k));
+    if (parseDayKey(k).getTime() <= cutoff && dayKcal(days[k], cfg) <= cfg.budget) add(weekKeyOf(parseDayKey(k)), winPoints(k));
   return pts;
 }
 
@@ -2135,11 +2147,14 @@ function coinHTML(tier, glyph, size, opts = {}) {
   const edges = [];
   for (let i = 0; i <= N; i++)
     edges.push(`<div class="cedge" style="transform: translateZ(${(-T / 2 + T * i / N).toFixed(1)}px);"></div>`);
+  const back = opts.date
+    ? `<span style="font-size:${Math.round(size * 0.2)}px; text-align:center; line-height:1.35;">HL<br><small style="font-size:${Math.max(8, Math.round(size * 0.082))}px; font-weight:600; letter-spacing:.05em;">${opts.date}</small></span>`
+    : `<span style="font-size:${Math.round(size * 0.3)}px;">HL</span>`;
   return `<div class="coin-scene" style="width:${size}px;height:${size}px;">
     <div class="coin3d ${tier} spin" ${opts.id ? `id="${opts.id}"` : ""} ${opts.onclick ? `onclick="${opts.onclick}"` : ""} style="width:${size}px;height:${size}px;">
       ${edges.join("")}
       <div class="cface front" style="transform: translateZ(${(T / 2).toFixed(1)}px);"><span style="font-size:${Math.round(size * 0.42)}px;">${glyph}</span></div>
-      <div class="cface back" style="transform: translateZ(${(-T / 2).toFixed(1)}px) rotateY(180deg);"><span style="font-size:${Math.round(size * 0.3)}px;">HL</span></div>
+      <div class="cface back" style="transform: translateZ(${(-T / 2).toFixed(1)}px) rotateY(180deg);">${back}</div>
     </div>
   </div>`;
 }
@@ -2163,14 +2178,14 @@ function coinDragInit(el) {
   el.addEventListener("pointercancel", () => { start = null; });
 }
 
-function showcase(tier, glyph, name, desc) {
+function showcase(tier, glyph, name, desc, date) {
   const overlay = document.createElement("div");
   overlay.className = "showcase";
   overlay.innerHTML = `<div class="sc-inner">
-    ${coinHTML(tier, glyph, 190, { id: "sc-coin" })}
+    ${coinHTML(tier, glyph, 190, { id: "sc-coin", date })}
     <div class="sc-name">${name}</div>
     <div class="sc-desc">${desc}</div>
-    <div class="sc-hint">drag the medal to rotate · tap outside to close</div>
+    <div class="sc-hint">drag the medal to rotate · the date achieved is engraved on the back</div>
   </div>`;
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
@@ -2182,7 +2197,9 @@ function showcase(tier, glyph, name, desc) {
 function showAward(i) {
   const a = ACHIEVEMENTS[i];
   const got = a.test(achCtx());
-  showcase(got ? "gold" : "locked", got ? a.icon : "🔒", a.name, got ? a.desc : `Locked — ${a.desc.toLowerCase()}`);
+  const d = got ? awardDate(i) : null;
+  showcase(got ? (a.mat || "gold") : "locked", got ? a.icon : "🔒", a.name,
+    got ? a.desc : `Locked — ${a.desc.toLowerCase()}`, d ? fmtShort(d) : null);
 }
 
 function showWeekMedal() {
@@ -2190,7 +2207,23 @@ function showWeekMedal() {
   const medal = medalFor(pts);
   showcase(medal ? MEDAL_TIER[medal] : "locked", "★",
     medal ? `${medal === "🥇" ? "Gold" : medal === "🥈" ? "Silver" : "Bronze"} week` : "No medal yet",
-    `${pts} points this week — workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}`);
+    `${pts} points this week — workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}`,
+    `wk of ${fmtShort(parseDayKey(weekKeyOf(new Date())))}`);
+}
+
+/* First-unlock moment: jackpot fanfare + kudos the moment an award unlocks.
+   First ever run seeds the baseline silently so history doesn't re-fire. */
+function checkNewAwards() {
+  const ctx = achCtx();
+  const passed = ACHIEVEMENTS.filter(a => a.test(ctx)).map(a => a.name);
+  const raw = localStorage.getItem("sl.achSeen");
+  if (raw === null) { store.save("sl.achSeen", passed); return; }
+  const seen = new Set(JSON.parse(raw));
+  const fresh = passed.filter(n => !seen.has(n));
+  if (!fresh.length) return;
+  store.save("sl.achSeen", passed);
+  celebrate(true);
+  for (const n of fresh) kudos("🏆 New award!", `${n} — open Awards to inspect your new medal`);
 }
 
 function progressCardHTML() {
@@ -2218,7 +2251,7 @@ function progressCardHTML() {
       <span class="cur"><span class="best">this week</span></span>
     </div>
     <div class="coin-row">
-      ${coinHTML(medal ? MEDAL_TIER[medal] : "locked", "★", 76, { onclick: "showWeekMedal()" })}
+      ${coinHTML(medal ? MEDAL_TIER[medal] : "locked", "★", 76, { onclick: "showWeekMedal()", date: fmtShort(parseDayKey(weekKeyOf(new Date()))) })}
       <div class="coin-info">
         <div class="wu-none">${weekLine}</div>
         <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
@@ -2241,18 +2274,20 @@ function progressCardHTML() {
 
 /* ================= awards ================= */
 
-/* All achievements are derived from logged data — nothing to store, nothing to lose. */
-function achCtx() {
+/* All achievements are derived from logged data — nothing to store, nothing to
+   lose. With a cutoff, the context is "as of that moment", which is how the
+   achieved-on dates engraved on medal backs are reconstructed. */
+function achCtx(cutoff = Infinity) {
   const best = {};
   let vol = 0;
-  const all = sessions();
+  const all = sessions().filter(s => new Date(s.startedAt) <= cutoff);
   for (const s of all)
     for (const e of s.entries) {
       for (const r of e.setReps) vol += r * e.weight;
       if (isSuccess(e)) best[e.ex] = Math.max(best[e.ex] || 0, e.weight);
     }
   const cfg = mealsCfg(), days = mealDays();
-  const keys = Object.keys(days).sort();
+  const keys = Object.keys(days).filter(k => parseDayKey(k).getTime() <= cutoff).sort();
   let wins = 0, fikaWins = 0, bounce = 0, prevOver = false;
   const weekWins = {};
   for (const k of keys) {
@@ -2266,37 +2301,58 @@ function achCtx() {
     }
     prevOver = !win;
   }
-  const golds = Object.values(weeklyPoints()).filter(p => p >= 100).length;
+  const golds = Object.values(weeklyPoints(cutoff)).filter(p => p >= 100).length;
   return {
-    best, vol, sessions: all.length, wins, weighins: bodyweights().length,
+    best, vol, sessions: all.length, wins,
+    weighins: bodyweights().filter(b => new Date(b.date) <= cutoff).length,
     fikaWins, bounce, golds, bestWeekWins: Math.max(0, ...Object.values(weekWins)),
   };
 }
 
-const liftClub = (ex, kg) => ({ icon: "🏋️", name: `${EXERCISES[ex].name} ${kg} kg`, desc: `Complete 5×5 at ${kg} kg`, test: c => (c.best[ex] || 0) >= kg });
+/* First moment an achieved award's test passes — binary search the event timeline */
+function awardDate(i) {
+  const a = ACHIEVEMENTS[i];
+  if (!a.test(achCtx())) return null;
+  const times = [
+    ...sessions().map(s => new Date(s.startedAt).getTime()),
+    ...bodyweights().map(b => new Date(b.date).getTime()),
+    ...Object.keys(mealDays()).map(k => parseDayKey(k).getTime()),
+  ].sort((x, y) => x - y);
+  let lo = 0, hi = times.length - 1, ans = times[hi];
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (a.test(achCtx(times[mid]))) { ans = times[mid]; hi = mid - 1; }
+    else lo = mid + 1;
+  }
+  return new Date(ans);
+}
+
+const fmtShort = d => d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+const liftClub = (ex, kg, mat) => ({ icon: "🏋️", mat, name: `${EXERCISES[ex].name} ${kg} kg`, desc: `Complete 5×5 at ${kg} kg`, test: c => (c.best[ex] || 0) >= kg });
 const ACHIEVEMENTS = [
-  { icon: "🎬", name: "First blood", desc: "Log your first workout", test: c => c.sessions >= 1 },
-  { icon: "📅", name: "Ten sessions", desc: "Log 10 workouts", test: c => c.sessions >= 10 },
-  { icon: "🗓", name: "Quarter century", desc: "Log 25 workouts", test: c => c.sessions >= 25 },
-  { icon: "💯", name: "Centurion", desc: "Log 100 workouts", test: c => c.sessions >= 100 },
-  liftClub("squat", 60), liftClub("squat", 80), liftClub("squat", 100), liftClub("squat", 120),
-  liftClub("bench", 60), liftClub("bench", 80), liftClub("bench", 100),
-  liftClub("deadlift", 100), liftClub("deadlift", 140), liftClub("deadlift", 180),
-  { icon: "🚚", name: "First tonne", desc: "Lift 1 t of total volume", test: c => c.vol >= 1000 },
-  { icon: "🐘", name: "Elephant herd", desc: "Lift 25 t — about 4 elephants", test: c => c.vol >= 25000 },
-  { icon: "🐋", name: "Blue whale", desc: "Lift 150 t — one blue whale", test: c => c.vol >= 150000 },
-  { icon: "✈️", name: "Jumbo jet", desc: "Lift 180 t — a loaded 747", test: c => c.vol >= 180000 },
-  { icon: "⭐", name: "First star", desc: "Log a day under budget", test: c => c.wins >= 1 },
-  { icon: "🌟", name: "Star collector", desc: "10 win days", test: c => c.wins >= 10 },
-  { icon: "✨", name: "Constellation", desc: "30 win days", test: c => c.wins >= 30 },
-  { icon: "🌌", name: "Galaxy brain", desc: "75 win days", test: c => c.wins >= 75 },
-  { icon: "☕", name: "Fika discipline", desc: "10 win days that included fika", test: c => c.fikaWins >= 10 },
-  { icon: "🧘", name: "Bounce back", desc: "Win the day right after an over day", test: c => c.bounce >= 1 },
-  { icon: "🃏", name: "Full week hand", desc: "5 win days inside one week", test: c => c.bestWeekWins >= 5 },
-  { icon: "🥇", name: "Gold standard", desc: "Earn a gold week", test: c => c.golds >= 1 },
-  { icon: "🏆", name: "Gold hoarder", desc: "Earn 5 gold weeks", test: c => c.golds >= 5 },
-  { icon: "⚖️", name: "On the record", desc: "Log 10 weigh-ins", test: c => c.weighins >= 10 },
-  { icon: "📈", name: "Data devotee", desc: "Log 50 weigh-ins", test: c => c.weighins >= 50 },
+  { icon: "🎬", mat: "bronze", name: "First blood", desc: "Log your first workout", test: c => c.sessions >= 1 },
+  { icon: "📅", mat: "silver", name: "Ten sessions", desc: "Log 10 workouts", test: c => c.sessions >= 10 },
+  { icon: "🗓", mat: "gold", name: "Quarter century", desc: "Log 25 workouts", test: c => c.sessions >= 25 },
+  { icon: "💯", mat: "obsidian", name: "Centurion", desc: "Log 100 workouts", test: c => c.sessions >= 100 },
+  liftClub("squat", 60, "iron"), liftClub("squat", 80, "silver"), liftClub("squat", 100, "gold"), liftClub("squat", 120, "obsidian"),
+  liftClub("bench", 60, "iron"), liftClub("bench", 80, "silver"), liftClub("bench", 100, "gold"),
+  liftClub("deadlift", 100, "iron"), liftClub("deadlift", 140, "gold"), liftClub("deadlift", 180, "obsidian"),
+  { icon: "🚚", mat: "bronze", name: "First tonne", desc: "Lift 1 t of total volume", test: c => c.vol >= 1000 },
+  { icon: "🐘", mat: "silver", name: "Elephant herd", desc: "Lift 25 t — about 4 elephants", test: c => c.vol >= 25000 },
+  { icon: "🐋", mat: "sapphire", name: "Blue whale", desc: "Lift 150 t — one blue whale", test: c => c.vol >= 150000 },
+  { icon: "✈️", mat: "obsidian", name: "Jumbo jet", desc: "Lift 180 t — a loaded 747", test: c => c.vol >= 180000 },
+  { icon: "⭐", mat: "bronze", name: "First star", desc: "Log a day under budget", test: c => c.wins >= 1 },
+  { icon: "🌟", mat: "amber", name: "Star collector", desc: "10 win days", test: c => c.wins >= 10 },
+  { icon: "✨", mat: "amber", name: "Constellation", desc: "30 win days", test: c => c.wins >= 30 },
+  { icon: "🌌", mat: "amethyst", name: "Galaxy brain", desc: "75 win days", test: c => c.wins >= 75 },
+  { icon: "☕", mat: "amber", name: "Fika discipline", desc: "10 win days that included fika", test: c => c.fikaWins >= 10 },
+  { icon: "🧘", mat: "emerald", name: "Bounce back", desc: "Win the day right after an over day", test: c => c.bounce >= 1 },
+  { icon: "🃏", mat: "amber", name: "Full week hand", desc: "5 win days inside one week", test: c => c.bestWeekWins >= 5 },
+  { icon: "🥇", mat: "gold", name: "Gold standard", desc: "Earn a gold week", test: c => c.golds >= 1 },
+  { icon: "🏆", mat: "gold", name: "Gold hoarder", desc: "Earn 5 gold weeks", test: c => c.golds >= 5 },
+  { icon: "⚖️", mat: "sapphire", name: "On the record", desc: "Log 10 weigh-ins", test: c => c.weighins >= 10 },
+  { icon: "📈", mat: "sapphire", name: "Data devotee", desc: "Log 50 weigh-ins", test: c => c.weighins >= 50 },
 ];
 
 function awardsHTML() {
@@ -2771,6 +2827,7 @@ function deleteSession(idx) {
 }
 
 render();
+checkNewAwards();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => { /* offline support unavailable */ });
