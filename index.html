@@ -1369,6 +1369,7 @@ function dashHTML() {
     ${progressCardHTML()}
     <div class="section-title"><span>Across your apps</span></div>
     ${analytics}
+    ${recapCardHTML()}
     ${remindersCardHTML()}
     <div class="section-title"><span>Your data</span></div>
     <div class="chart-card">
@@ -2293,6 +2294,94 @@ function bodyHTML() {
     ${chart}
     <div class="section-title"><span>Entries</span><span>${ms.length} total${ms.length > 10 ? " · showing last 10" : ""}</span></div>
     <div class="hist-card">${rows}</div>`;
+}
+
+/* ================= monthly recap ================= */
+
+function monthRecap() {
+  const now = new Date();
+  const mStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const mEnd = new Date(now.getFullYear(), now.getMonth(), 1); // exclusive
+  const inM = iso => { const t = new Date(iso); return t >= mStart && t < mEnd; };
+
+  const sess = sessions().filter(s => inM(s.startedAt));
+  let vol = 0;
+  for (const s of sess)
+    for (const e of s.entries)
+      for (const r of e.setReps) vol += r * e.weight;
+
+  // PRs set during the month: best completed weight beating everything before it
+  const prevBest = {}, monthBest = {};
+  for (const s of sessions())
+    for (const e of s.entries) {
+      if (!isSuccess(e)) continue;
+      const t = new Date(s.startedAt);
+      if (t < mStart) prevBest[e.ex] = Math.max(prevBest[e.ex] || 0, e.weight);
+      else if (t < mEnd) monthBest[e.ex] = Math.max(monthBest[e.ex] || 0, e.weight);
+    }
+  const prs = Object.keys(monthBest)
+    .filter(ex => monthBest[ex] > (prevBest[ex] || 0))
+    .map(ex => `${EXERCISES[ex].name} ${fmtKg(monthBest[ex])}`);
+
+  const bw = bodyweights();
+  const before = bw.filter(b => new Date(b.date) < mStart);
+  const inMonth = bw.filter(b => inM(b.date));
+  const startKg = inMonth.length ? (before.length ? before[before.length - 1].kg : inMonth[0].kg) : null;
+  const wDelta = startKg === null ? null : Math.round((inMonth[inMonth.length - 1].kg - startKg) * 10) / 10;
+
+  const cfg = mealsCfg(), days = mealDays();
+  const wins = Object.keys(days).filter(k => {
+    const d = parseDayKey(k);
+    return d >= mStart && d < mEnd && dayKcal(days[k], cfg) <= cfg.budget;
+  }).length;
+
+  const weeks = weeklyPoints();
+  const medals = Object.keys(weeks).sort()
+    .filter(k => { const d = parseDayKey(k); return d >= mStart && d < mEnd; })
+    .map(k => medalFor(weeks[k])).filter(Boolean);
+
+  return {
+    label: mStart.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+    sessions: sess.length, vol: Math.round(vol), prs, wDelta, wins, medals,
+    has: !!(sess.length || inMonth.length || wins),
+  };
+}
+
+function recapCardHTML() {
+  const r = monthRecap();
+  if (!r.has) return "";
+  const rows = [];
+  if (r.sessions) rows.push(`${r.sessions} workout${r.sessions === 1 ? "" : "s"} · ${fmtVolume(r.vol)} lifted`);
+  if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta} kg over the month`);
+  if (r.wins) rows.push(`${r.wins} ⭐ win day${r.wins === 1 ? "" : "s"}`);
+  if (r.prs.length) rows.push(`new PRs: ${r.prs.join(" · ")}`);
+  return `<div class="section-title"><span>Last month</span></div>
+  <div class="chart-card" id="recap-card">
+    <div class="chart-head">
+      <h3>${r.label}</h3>
+      <span class="cur">${r.medals.join(" ")}</span>
+    </div>
+    ${rows.map(x => `<div class="wu-none" style="margin-top: 4px;">${x}</div>`).join("")}
+    <div class="data-actions"><button onclick="copyRecap()">Copy recap</button></div>
+  </div>`;
+}
+
+async function copyRecap() {
+  const r = monthRecap();
+  const lines = [
+    `Health Log — ${r.label}`,
+    `Workouts: ${r.sessions} (${fmtVolume(r.vol)} lifted)`,
+    r.wDelta !== null ? `Bodyweight: ${r.wDelta > 0 ? "+" : ""}${r.wDelta} kg` : null,
+    `Win days: ${r.wins}`,
+    r.medals.length ? `Medals: ${r.medals.join(" ")}` : null,
+    r.prs.length ? `New PRs: ${r.prs.join(", ")}` : null,
+  ].filter(Boolean);
+  try {
+    await navigator.clipboard.writeText(lines.join("\n"));
+    alert("Recap copied — paste it anywhere.");
+  } catch {
+    prompt("Copy your recap:", lines.join("\n"));
+  }
 }
 
 /* ================= reminders ================= */
