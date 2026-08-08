@@ -14,7 +14,7 @@ A personal health suite in a single HTML file — no backend, no accounts, no tr
 
 ## The apps
 
-- **Summary** — weekly activity rings (workouts, weigh-in days, win days), cross-app analytics charts (weight lifted, weight logged, calories, waist), data-driven insights ("weeks with 4+ win days: −0.5 kg on the scale"), a monthly recap, weekly medals with 3D rotatable coins, win chests, and gentle reminders.
+- **Summary** — weekly activity rings (workouts, weigh-in days, win days), cross-app analytics charts (weight lifted, weight logged, calories, waist), data-driven insights ("weeks with 4+ win days: −0.5 kg on the scale"), a monthly recap, weekly medals with 3D rotatable coins, and gentle reminders.
 - **StrongLifts** — the full 5×5 program: alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator, a rest timer, and stats including the powerlifting competition total (squat + bench + deadlift), session tonnage with a dotted warm-up line, and per-lift PR charts.
 - **Body** — morning weigh-ins with BMI, a goal weight with kg/week pace and a projected arrival date, a ghost race against real past regime runs (beat 2022-you), and tape measurements (waist, chest, arm, thigh) behind a Weight/Measure switch.
 - **Meals** — calorie tracking without food diaries: tick meal slots (breakfast, lunch, fika, dinner, drinks, snacks) with rough per-slot estimates against a daily budget. Stay under budget and the day earns a ⭐. Missed days simply don't exist — no streaks, no nagging.
