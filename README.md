@@ -15,15 +15,15 @@ My personal health app. Everything runs in a single HTML file in the browser. No
 ## What's inside
 
 - **Summary**: weekly activity rings (workouts, weigh-in days, win days), charts for weight lifted, weight logged, calories and waist, insights computed from my own data, a monthly recap, weekly medals as 3D coins and optional reminders.
-- **StrongLifts**: full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift.
+- **Activities**: each activity is its own app. StrongLifts is the full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift. Swimming logs time in the water and distance when available, with pace per 100 m. Every activity counts toward the green ring and weekly medals.
 - **Body**: morning weigh-ins with BMI, a goal weight with pace and estimated finish date, a ghost race against my earlier runs, and tape measurements (waist, chest, arm, thigh) behind a Weight/Measure switch.
 - **Meals**: no calorie counting, just meal slots. Tick breakfast, lunch, fika, dinner, drinks and snacks against a daily budget. A day under budget earns a star. Missed days are fine and count against nothing.
-- **Awards**: 29 achievements as rotatable 3D medals in different materials, with the date earned engraved on the back. Everything unlocks from logged data, nothing to claim.
+- **Awards**: 32 achievements as rotatable 3D medals in different materials, with the date earned engraved on the back. Everything unlocks from logged data, nothing to claim.
 
 ## How to use
 
 1. Open the app at the link above.
-2. Log workouts in StrongLifts: Start workout, tap the circles as you lift (once for all reps, again to count down), then Finish & save. The next session's weights are calculated automatically.
+2. Log activities in Activities. StrongLifts: Start workout, tap the circles as you lift (once for all reps, again to count down), then Finish & save. The next session's weights are calculated automatically.
 3. Weigh in each morning before breakfast in Body. Set height and goal weight in the profile to get BMI, pace and a finish date.
 4. Tick meals during the day in Meals. Stay under budget to earn the star. Yesterday can be backfilled if a day slips.
 5. Check Summary for rings, medals, recaps and insights.
