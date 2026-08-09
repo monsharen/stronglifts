@@ -28,7 +28,7 @@
     --radius: 14px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  html { height: 100%; }
+  html { height: 100%; overscroll-behavior-y: none; }
   body {
     background: var(--bg);
     color: var(--chalk);
@@ -36,6 +36,7 @@
     font-size: 15px;
     line-height: 1.45;
     min-height: 100%;
+    overscroll-behavior-y: none;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     -webkit-font-smoothing: antialiased;
   }
