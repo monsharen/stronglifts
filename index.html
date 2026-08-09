@@ -649,10 +649,11 @@ const TAB_ICONS = {
   barbell: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8.5 12h7"/><rect x="4.5" y="7.5" width="3" height="9" rx="1.2"/><rect x="16.5" y="7.5" width="3" height="9" rx="1.2"/><path d="M2 12h1.5M20.5 12H22"/></svg>`,
   scale: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5.5"/><path d="M12 10.5l2.8-2.8"/></svg>`,
   meals: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 3v5.5M4.5 3v3.5a2.5 2.5 0 0 0 5 0V3M7 11v10"/><path d="M16.5 3c1.8 2.2 1.8 6.3 0 8.5V21"/></svg>`,
+  flame: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 2.5c.6 3.5-4.8 6-4.8 10.6a4.8 4.8 0 0 0 9.6 0c0-1.6-.6-3-1.6-4.4-.4 1.3-1.2 2-2.2 2.3.9-2.4.4-5.8-1-8.5z"/></svg>`,
 };
 const TABS = [
   { route: "#/", label: "Summary", icon: TAB_ICONS.rings, match: h => h === "#/" || h === "#/awards" },
-  { route: "#/stronglifts", label: "StrongLifts", icon: TAB_ICONS.barbell, match: h => h.startsWith("#/stronglifts") },
+  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" },
   { route: "#/body", label: "Body", icon: TAB_ICONS.scale, match: h => h.startsWith("#/body") },
   { route: "#/meals", label: "Meals", icon: TAB_ICONS.meals, match: h => h === "#/meals" },
 ];
@@ -666,7 +667,7 @@ function tabbarHTML() {
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/stronglifts", "#/stronglifts/stats", "#/body", "#/body/measure", "#/meals", "#/awards"];
+const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/body", "#/body/measure", "#/meals", "#/awards"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   if (h === "#/weight") return "#/body"; // Weight merged into Body
@@ -719,8 +720,10 @@ function whyLabel(rec) {
 
 function render() {
   app.innerHTML = (
-    route === "#/stronglifts" ? (draft ? sessionHTML() : homeHTML())
+    route === "#/activities" ? activitiesHTML()
+    : route === "#/stronglifts" ? (draft ? sessionHTML() : homeHTML())
     : route === "#/stronglifts/stats" ? statsHTML()
+    : route === "#/swim" ? swimHTML()
     : route === "#/body" ? weightHTML()
     : route === "#/body/measure" ? bodyHTML()
     : route === "#/meals" ? mealsHTML()
@@ -731,9 +734,10 @@ function render() {
 }
 
 function appHeaderHTML(title, right, back = false) {
+  const target = back === true ? "#/" : back;
   return `<header>
     <div class="h-left">
-      ${back ? `<button class="back" onclick="navigate('#/')" aria-label="Back to summary">‹</button>` : ""}
+      ${back ? `<button class="back" onclick="navigate('${target}')" aria-label="Back">‹</button>` : ""}
       <h1>${title}</h1>
     </div>
     ${right}
@@ -747,7 +751,128 @@ function slHeaderHTML() {
         <button class="tab ${route === "#/stronglifts" ? "active" : ""}" onclick="navigate('#/stronglifts')">Log</button>
         <button class="tab ${route === "#/stronglifts/stats" ? "active" : ""}" onclick="navigate('#/stronglifts/stats')">Stats</button>
       </nav>`;
-  return appHeaderHTML("StrongLifts", right);
+  return appHeaderHTML("StrongLifts", right, "#/activities");
+}
+
+/* ================= activities ================= */
+
+function activitiesHTML() {
+  const sl = sessions();
+  const sw = swims();
+  const swMin = sw.reduce((s, e) => s + e.min, 0);
+  const swKm = Math.round(sw.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
+  return `${appHeaderHTML("Activities", `<span class="tag">${sl.length + sw.length} sessions</span>`)}
+    <div class="chart-card tap" onclick="navigate('#/stronglifts')">
+      <div class="chart-head"><h3>🏋️ StrongLifts</h3><span class="cur"><span class="card-chev">›</span></span></div>
+      <div class="wu-none">${draft ? "Workout in progress — jump back in" : sl.length
+        ? `Next: workout ${nextWorkoutType()} · ${sl.length} session${sl.length === 1 ? "" : "s"} · ${fmtVolume(Math.round(lifetimeVol()))} lifted`
+        : "5×5 barbell program — start your first workout"}</div>
+    </div>
+    <div class="chart-card tap" onclick="navigate('#/swim')">
+      <div class="chart-head"><h3>🏊 Swimming</h3><span class="cur"><span class="card-chev">›</span></span></div>
+      <div class="wu-none">${sw.length
+        ? `${sw.length} swim${sw.length === 1 ? "" : "s"} · ${Math.round(swMin / 6) / 10} h${swKm ? ` · ${swKm} km` : ""}`
+        : "Time in the water, distance when you have it"}</div>
+    </div>
+    <div class="wu-none" style="margin-top: 12px;">Every activity counts toward the green ring and weekly medal points.</div>`;
+}
+
+/* ================= swimming ================= */
+
+const swims = () => store.load("sl.swim", []); // oldest first: { date, min, m? }
+const swimPace = e => {
+  if (!e.m) return null;
+  const s = e.min * 60 / (e.m / 100);
+  return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+};
+
+function logSwim() {
+  const minIn = document.getElementById("swim-min");
+  const min = parseFloat(String(minIn.value).replace(",", "."));
+  if (isNaN(min) || min <= 0) { minIn.focus(); return; }
+  const m = parseFloat(String(document.getElementById("swim-m").value).replace(",", "."));
+  const entry = { date: new Date().toISOString(), min: Math.round(min) };
+  if (!isNaN(m) && m > 0) entry.m = Math.round(m);
+  const before = juiceSnapshot();
+  const all = swims();
+  all.push(entry);
+  store.save("sl.swim", all);
+  armAudio();
+  chime("tick");
+  if (navigator.vibrate) navigator.vibrate(15);
+  kudos("Swim logged!", `${entry.min} min${entry.m ? ` · ${entry.m} m · ${swimPace(entry)} /100 m` : ""}`);
+  juiceAfter(before);
+  render();
+}
+
+function deleteSwim(idx) {
+  const all = swims();
+  if (!all[idx] || !confirm(`Remove the swim from ${fmtDate(all[idx].date)}?`)) return;
+  all.splice(idx, 1);
+  store.save("sl.swim", all);
+  render();
+}
+
+const swimPickKey = () => store.load("sl.swimPick", "min");
+function swimPick(k) { store.save("sl.swimPick", k); render(); }
+
+function swimHTML() {
+  const all = swims();
+  const header = appHeaderHTML("Swimming", `<span class="tag">activity</span>`, "#/activities");
+  const form = `<div class="bw-form">
+      <input type="text" inputmode="numeric" id="swim-min" placeholder="minutes">
+      <input type="text" inputmode="numeric" id="swim-m" placeholder="metres (opt.)">
+      <button onclick="logSwim()">Log swim</button>
+    </div>`;
+
+  if (!all.length) {
+    return `${header}
+      <div class="chart-card">
+        <div class="wu-none">Log time in the water, and distance when the pool counter or watch gives you one. An hour without a distance is a perfectly good entry.</div>
+        ${form}
+      </div>`;
+  }
+
+  const totMin = all.reduce((s, e) => s + e.min, 0);
+  const totM = all.reduce((s, e) => s + (e.m || 0), 0);
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${all.length}</div><div class="lbl">Swims</div></div>
+    <div class="tile"><div class="num">${Math.round(totMin / 6) / 10}</div><div class="lbl">Hours</div></div>
+    <div class="tile"><div class="num">${totM ? Math.round(totM / 100) / 10 : "–"}</div><div class="lbl">km total</div></div>
+  </div>`;
+
+  const pick = swimPickKey();
+  const pts = pick === "m"
+    ? all.filter(e => e.m).map(e => ({ weight: e.m, ok: true, date: e.date }))
+    : all.map(e => ({ weight: e.min, ok: true, date: e.date }));
+  const picker = `<div class="data-actions" style="margin-top: 0; margin-bottom: 10px;">
+      <button class="${pick === "min" ? "active" : ""}" onclick="swimPick('min')">Time</button>
+      <button class="${pick === "m" ? "active" : ""}" onclick="swimPick('m')">Distance</button>
+    </div>`;
+
+  const chart = `<div class="chart-card">
+      ${picker}
+      ${pts.length > 1
+        ? chartSVG(pts, -1, w => w + (pick === "m" ? " m" : " min"), null, "#64d2ff") + `<div class="chart-dates">
+            <span>${fmtDate(pts[0].date)}</span><span>${pts.length} swim${pts.length === 1 ? "" : "s"}</span><span>${fmtDate(pts[pts.length - 1].date)}</span>
+          </div>`
+        : `<div class="wu-none">${pick === "m" ? "Log two swims with distance to see the trend." : "Log a second swim to see the trend."}</div>`}
+      ${form}
+    </div>`;
+
+  const rows = all.slice(-10).reverse().map(e => {
+    const idx = all.indexOf(e);
+    return `<div class="hist-row">
+      <span>${e.min} min${e.m ? ` <span class="reps">· ${e.m} m · ${swimPace(e)} /100 m</span>` : ""}</span>
+      <span class="reps">${fmtDate(e.date)} <button class="hist-del" onclick="deleteSwim(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
+    </div>`;
+  }).join("");
+
+  return `${header}
+    ${tiles}
+    ${chart}
+    <div class="section-title"><span>Swims</span><span>${all.length} total${all.length > 10 ? " · showing last 10" : ""}</span></div>
+    <div class="hist-card">${rows}</div>`;
 }
 
 function homeHTML() {
@@ -1370,7 +1495,8 @@ function weekRingStats() {
   const wk = weekKeyOf(new Date());
   const cfg = mealsCfg(), days = mealDays();
   return {
-    workouts: sessions().filter(s => weekKeyOf(s.startedAt) === wk).length,
+    workouts: sessions().filter(s => weekKeyOf(s.startedAt) === wk).length
+      + swims().filter(s => weekKeyOf(s.date) === wk).length,
     weighins: new Set(bodyweights().filter(b => weekKeyOf(b.date) === wk).map(b => dayKeyOf(b.date))).size,
     wins: Object.keys(days).filter(k => weekKeyOf(parseDayKey(k)) === wk && dayKcal(days[k], cfg) <= cfg.budget).length,
   };
@@ -1384,7 +1510,7 @@ function ringsCardHTML() {
     <div class="rings-row">
       ${ringsSVG([r.workouts / RING_GOALS.workouts, r.weighins / RING_GOALS.weighins, r.wins / RING_GOALS.wins])}
       <div class="ring-stats">
-        ${stat("Workouts", r.workouts, RING_GOALS.workouts, "#30d158")}
+        ${stat("Activities", r.workouts, RING_GOALS.workouts, "#30d158")}
         ${stat("Weigh-in days", r.weighins, RING_GOALS.weighins, "#0a84ff")}
         ${stat("Win days", r.wins, RING_GOALS.wins, "#ff9f0a")}
       </div>
@@ -1440,6 +1566,17 @@ function dashHTML() {
     ${mealPts.length > 1 ? chartSVG(mealPts, -1, w => w, null, "#ff9f0a") : ""}
   </div>` : "";
 
+  const swimAll = swims();
+  const swimPts = swimAll.map(s => ({ weight: s.min, ok: true, date: s.date }));
+  const swimKmTot = Math.round(swimAll.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
+  const swimming = swimPts.length ? `<div class="chart-card tap" onclick="navigate('#/swim')">
+    <div class="chart-head">
+      <h3 style="color:#64d2ff;">Swimming</h3>
+      <span class="cur">${swimPts[swimPts.length - 1].weight} min<span class="best">${swimKmTot ? swimKmTot + " km total" : swimAll.length + " swims"}</span><span class="card-chev">›</span></span>
+    </div>
+    ${swimPts.length > 1 ? chartSVG(swimPts, -1, w => w + " min", null, "#64d2ff") : ""}
+  </div>` : "";
+
   const waistPts = measSeries("waist");
   const waist = waistPts.length ? `<div class="chart-card tap" onclick="navigate('#/body/measure')">
     <div class="chart-head">
@@ -1449,9 +1586,9 @@ function dashHTML() {
     ${waistPts.length > 1 ? chartSVG(waistPts, -1, w => w, null, "#bf5af2") : ""}
   </div>` : "";
 
-  const analytics = (lifted || logged || calories || waist)
-    ? lifted + logged + calories + waist
-    : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log a workout in StrongLifts, a weigh-in in Weight or a meal in Meals, and your combined analytics appear here.</div></div>`;
+  const analytics = (lifted || swimming || logged || calories || waist)
+    ? lifted + swimming + logged + calories + waist
+    : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log an activity, a weigh-in or a meal, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
   const nudgeBanner = nudges.length
@@ -1502,6 +1639,7 @@ async function exportData() {
     meals: mealDays(),
     mealsCfg: store.load("sl.mealsCfg", null),
     meas: measurements(),
+    swim: swims(),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -1564,6 +1702,19 @@ async function importData() {
     if (added) store.save("sl.meals", days);
   }
   if (data.mealsCfg && !localStorage.getItem("sl.mealsCfg")) store.save("sl.mealsCfg", data.mealsCfg);
+
+  if (Array.isArray(data.swim)) {
+    const sw = swims();
+    const seenSw = new Set(sw.map(s => s.date));
+    let addedSw = 0;
+    for (const s of data.swim) {
+      if (s && s.date && typeof s.min === "number" && !seenSw.has(s.date)) { sw.push(s); addedSw++; }
+    }
+    if (addedSw) {
+      sw.sort((a, b) => new Date(a.date) - new Date(b.date));
+      store.save("sl.swim", sw);
+    }
+  }
 
   if (Array.isArray(data.meas)) {
     const ms = measurements();
@@ -2151,6 +2302,7 @@ function weeklyPoints(cutoff = Infinity) {
   const pts = {};
   const add = (k, v) => { pts[k] = (pts[k] || 0) + v; };
   for (const s of sessions()) if (new Date(s.startedAt) <= cutoff) add(weekKeyOf(s.startedAt), MEDAL_PTS.workout);
+  for (const s of swims()) if (new Date(s.date) <= cutoff) add(weekKeyOf(s.date), MEDAL_PTS.workout);
   for (const b of bodyweights()) if (new Date(b.date) <= cutoff) add(weekKeyOf(b.date), MEDAL_PTS.weighin);
   const cfg = mealsCfg(), days = mealDays();
   for (const k of Object.keys(days))
@@ -2319,10 +2471,12 @@ function achCtx(cutoff = Infinity) {
     prevOver = !win;
   }
   const golds = Object.values(weeklyPoints(cutoff)).filter(p => p >= 100).length;
+  const sw = swims().filter(s => new Date(s.date) <= cutoff);
   return {
     best, vol, sessions: all.length, wins,
     weighins: bodyweights().filter(b => new Date(b.date) <= cutoff).length,
     fikaWins, bounce, golds, bestWeekWins: Math.max(0, ...Object.values(weekWins)),
+    swims: sw.length, swimKm: sw.reduce((s, e) => s + (e.m || 0), 0) / 1000,
   };
 }
 
@@ -2332,6 +2486,7 @@ function awardDate(i) {
   if (!a.test(achCtx())) return null;
   const times = [
     ...sessions().map(s => new Date(s.startedAt).getTime()),
+    ...swims().map(s => new Date(s.date).getTime()),
     ...bodyweights().map(b => new Date(b.date).getTime()),
     ...Object.keys(mealDays()).map(k => parseDayKey(k).getTime()),
   ].sort((x, y) => x - y);
@@ -2370,6 +2525,9 @@ const ACHIEVEMENTS = [
   { icon: "🏆", mat: "gold", name: "Gold hoarder", desc: "Earn 5 gold weeks", test: c => c.golds >= 5 },
   { icon: "⚖️", mat: "sapphire", name: "On the record", desc: "Log 10 weigh-ins", test: c => c.weighins >= 10 },
   { icon: "📈", mat: "sapphire", name: "Data devotee", desc: "Log 50 weigh-ins", test: c => c.weighins >= 50 },
+  { icon: "🏊", mat: "sapphire", name: "First swim", desc: "Log your first swim", test: c => c.swims >= 1 },
+  { icon: "🐬", mat: "sapphire", name: "Dolphin", desc: "Log 25 swims", test: c => c.swims >= 25 },
+  { icon: "🌊", mat: "sapphire", name: "Open water", desc: "Swim 10 km in total", test: c => c.swimKm >= 10 },
 ];
 
 function awardsHTML() {
@@ -2534,6 +2692,9 @@ function monthRecap() {
     return d >= mStart && d < mEnd && dayKcal(days[k], cfg) <= cfg.budget;
   }).length;
 
+  const monthSwims = swims().filter(s => inM(s.date));
+  const swimKm = Math.round(monthSwims.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
+
   const weeks = weeklyPoints();
   const medals = Object.keys(weeks).sort()
     .filter(k => { const d = parseDayKey(k); return d >= mStart && d < mEnd; })
@@ -2542,7 +2703,8 @@ function monthRecap() {
   return {
     label: mStart.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
     sessions: sess.length, vol: Math.round(vol), prs, wDelta, wins, medals,
-    has: !!(sess.length || inMonth.length || wins),
+    swims: monthSwims.length, swimKm,
+    has: !!(sess.length || inMonth.length || wins || monthSwims.length),
   };
 }
 
@@ -2551,6 +2713,7 @@ function recapCardHTML() {
   if (!r.has) return "";
   const rows = [];
   if (r.sessions) rows.push(`${r.sessions} workout${r.sessions === 1 ? "" : "s"} · ${fmtVolume(r.vol)} lifted`);
+  if (r.swims) rows.push(`${r.swims} swim${r.swims === 1 ? "" : "s"}${r.swimKm ? ` · ${r.swimKm} km` : ""}`);
   if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta} kg over the month`);
   if (r.wins) rows.push(`${r.wins} ⭐ win day${r.wins === 1 ? "" : "s"}`);
   if (r.prs.length) rows.push(`new PRs: ${r.prs.join(" · ")}`);
