@@ -4,18 +4,18 @@ My personal health app. Everything runs in a single HTML file in the browser. No
 
 **Open it here: https://monsharen.github.io/stronglifts/**
 
-| Summary | StrongLifts | Body |
+| Summary | Activities | StrongLifts |
 |---|---|---|
-| ![Summary](screenshots/summary.png) | ![StrongLifts stats](screenshots/stronglifts-stats.png) | ![Body](screenshots/body.png) |
+| ![Summary](screenshots/summary.png) | ![Activities](screenshots/activities.png) | ![StrongLifts stats](screenshots/stronglifts-stats.png) |
 
-| Meals | Awards |
-|---|---|
-| ![Meals](screenshots/meals.png) | ![Awards with 3D medal](screenshots/awards.png) |
+| Body | Meals | Awards |
+|---|---|---|
+| ![Body](screenshots/body.png) | ![Meals](screenshots/meals.png) | ![Awards with 3D medal](screenshots/awards.png) |
 
 ## What's inside
 
-- **Summary**: weekly activity rings (workouts, weigh-in days, win days), charts for weight lifted, weight logged, calories and waist, insights computed from my own data, a monthly recap, weekly medals as 3D coins and optional reminders.
-- **Activities**: each activity is its own app. StrongLifts is the full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails, and an easier weight after a layoff since strength fades with time off), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift. Running is an adaptive 10 km programme: sessions rotate Intervals, Tempo and Long run with paces derived from an estimated 10 km time that drops 30 s per completed cycle, deloads after three straight fails, and re-baselines whenever a measured 10 km run beats the estimate. Swimming logs time in the water and distance when available, with pace per 100 m. Every activity counts toward the green ring and weekly medals.
+- **Summary**: weekly activity rings (activities, weigh-in days, win days), charts for weight lifted, weight logged, calories and waist, insights computed from my own data, a monthly recap, a This Week card that earns a bronze, silver or gold medal from the week's effort, and optional reminders.
+- **Activities**: a landing page of activities, each its own app. StrongLifts is the full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails, and an easier weight after a layoff since strength fades with time off), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift. Running is an adaptive 10 km programme: sessions rotate Intervals, Tempo and Long run with paces derived from an estimated 10 km time that drops 30 s per completed cycle, deloads after three straight fails, and re-baselines whenever a measured 10 km run beats the estimate. Swimming logs time in the water and distance when available, with pace per 100 m. Every activity counts toward the green ring and weekly medals.
 - **Body**: morning weigh-ins with BMI, a goal weight with pace and estimated finish date, a ghost race against my earlier runs, and tape measurements (waist, chest, arm, thigh) behind a Weight/Measure switch.
 - **Meals**: no calorie counting, just meal slots. Tick breakfast, lunch, fika, dinner, drinks and snacks against a daily budget. A day under budget earns a star. Missed days are fine and count against nothing.
 - **Awards**: 36 achievements as rotatable 3D medals in different materials, with the date earned engraved on the back. Everything unlocks from logged data, nothing to claim.

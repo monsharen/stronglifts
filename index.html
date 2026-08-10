@@ -2574,7 +2574,7 @@ function progressCardHTML() {
   const fillPct = atMax ? 100 : Math.round((thisWeek - lo) / (hi - lo) * 100);
   const fillTier = atMax ? "gold" : (nextName || "").toLowerCase();
 
-  const tierLabel = medal ? `${TIER_NAME[medal]} week` : "This week";
+  const tierLabel = medal ? `${TIER_NAME[medal]} week` : "In progress";
   const remaining = hi - thisWeek;
   const note = atMax ? "A complete week — every ring earned."
     : remaining <= MEDAL_PTS.workout ? `One more session away from ${nextName}.`
