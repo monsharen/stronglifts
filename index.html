@@ -772,7 +772,8 @@ function activitiesHTML() {
     </div>
     <div class="chart-card tap" onclick="navigate('#/run')">
       <div class="chart-head"><h3>🏃 Running</h3><span class="cur"><span class="card-chev">›</span></span></div>
-      <div class="wu-none">${runData().length
+      <div class="wu-none">${runDraft() ? `${RUN_TYPES[runDraft().type]} in progress — jump back in`
+        : runData().length
         ? `Est. 10 km ${fmtRunTime(runState().W)} · goal ${fmtRunTime(runCfg().goal)} · next: ${RUN_TYPES[runState().next]}`
         : "Adaptive 10 km programme — from your time to your goal"}</div>
     </div>
@@ -2638,24 +2639,89 @@ function runPrescription(type, W) {
   return `60 min easy at around ${fmtPace(p * 1.25)} /km — fully conversational. Slower is fine; time on feet is the point.`;
 }
 
-function logRun(ok) {
+/* The prescribed segments for a session type at the current estimate.
+   Ticking them off during the run marks what the session actually included. */
+function runSegments(type, W) {
+  const p = W / 10;
+  if (type === "I") return [
+    { name: "Warm-up", detail: "10 min easy" },
+    ...Array.from({ length: 6 }, (_, i) => ({ name: `Rep ${i + 1}`, detail: `800 m · ${fmtPace(p * 0.9)}/km` })),
+    { name: "Cool-down", detail: "10 min easy" },
+  ];
+  if (type === "T") return [
+    { name: "Warm-up", detail: "10 min easy" },
+    { name: "Tempo", detail: `25 min · ${fmtPace(p)}/km` },
+    { name: "Cool-down", detail: "10 min easy" },
+  ];
+  return [{ name: "Long run", detail: `60 min · ${fmtPace(p * 1.25)}/km easy` }];
+}
+
+const runDraft = () => store.load("sl.rundraft", null);
+const saveRunDraft = d => store.save("sl.rundraft", d);
+
+function startRun() {
+  const st = runState();
+  saveRunDraft({
+    type: st.next,
+    startedAt: new Date().toISOString(),
+    W: st.W,
+    session: st.count + 1,
+    segs: runSegments(st.next, st.W).map(s => ({ name: s.name, detail: s.detail, done: false })),
+    min: "", km: "",
+  });
+  armAudio();
+  render();
+  window.scrollTo(0, 0);
+}
+
+function tapRunSeg(i) {
+  const d = runDraft();
+  if (!d) return;
+  d.segs[i].done = !d.segs[i].done;
+  saveRunDraft(d);
+  if (d.segs[i].done) { chime("tick"); if (navigator.vibrate) navigator.vibrate(12); }
+  render();
+}
+
+function setRunDraftField(field, val) {
+  const d = runDraft();
+  if (!d) return;
+  d[field] = val;
+  saveRunDraft(d);
+}
+
+function discardRun() {
+  if (!confirm("Discard this run? Nothing will be saved.")) return;
+  store.drop("sl.rundraft");
+  render();
+}
+
+function finishRun() {
+  const d = runDraft();
+  if (!d) return;
+  const doneCount = d.segs.filter(s => s.done).length;
+  if (doneCount === 0 && !confirm("No segments ticked. Save anyway?")) return;
   const st = runState();
   const cfg = runCfg();
-  const min = parseFloat(String(document.getElementById("run-min").value).replace(",", "."));
-  const km = parseFloat(String(document.getElementById("run-km").value).replace(",", "."));
-  const entry = { date: new Date().toISOString(), type: st.next, ok: !!ok };
+  const min = parseFloat(String(d.min).replace(",", "."));
+  const km = parseFloat(String(d.km).replace(",", "."));
+  const entry = {
+    date: d.startedAt,
+    type: d.type,
+    ok: doneCount === d.segs.length,
+    segs: d.segs.map(s => s.done),
+    segCount: d.segs.length,
+  };
   if (!isNaN(min) && min > 0) entry.min = Math.round(min * 10) / 10;
   if (!isNaN(km) && km > 0) entry.km = Math.round(km * 100) / 100;
   const before = juiceSnapshot();
   const all = runData();
   all.push(entry);
   store.save("sl.run", all);
-  armAudio();
-  chime("tick");
-  if (navigator.vibrate) navigator.vibrate(15);
+  store.drop("sl.rundraft");
   const st2 = runState();
-  if (ok) kudos("Run done!", `${RUN_TYPES[entry.type]}${entry.min ? ` · ${entry.min} min` : ""}${entry.km ? ` · ${entry.km} km` : ""}`);
-  else kudos("Logged", `${RUN_TYPES[entry.type]} — rough days build the good ones`, true);
+  if (entry.ok) { celebrate(false); kudos("Run done!", `${RUN_TYPES[entry.type]} · all ${entry.segCount} segments${entry.min ? ` · ${entry.min} min` : ""}${entry.km ? ` · ${entry.km} km` : ""}`); }
+  else kudos("Saved", `${RUN_TYPES[entry.type]} · ${doneCount}/${entry.segCount} segments — every bit counts`, true);
   if (st2.W < st.W) {
     const hitGoal = st.W > cfg.goal && st2.W <= cfg.goal;
     celebrate(hitGoal);
@@ -2663,6 +2729,7 @@ function logRun(ok) {
   }
   juiceAfter(before);
   render();
+  window.scrollTo(0, 0);
 }
 
 function deleteRun(idx) {
@@ -2683,7 +2750,40 @@ function saveRunCfg() {
   render();
 }
 
+/* Live run session, StrongLifts-style: tick segments, then save or discard */
+function runSessionHTML(d) {
+  const done = d.segs.filter(s => s.done).length;
+  const segBtns = d.segs.map((s, i) => `<div class="wu-set ${s.done ? "checked" : ""}">
+      <button class="wu-btn" onclick="tapRunSeg(${i})">${s.done ? "✓" : ""}</button>
+      <span class="wu-w">${s.name}</span>
+    </div>`).join("");
+  const details = d.segs.map(s => `<div class="hist-row"><span>${s.name}</span><span class="reps">${s.detail}</span></div>`).join("");
+
+  return `${appHeaderHTML("Running", `<span class="tag">in progress</span>`, "#/activities")}
+    <div class="sess-head">
+      <div class="kicker">${fmtDate(d.startedAt)} · session ${d.session}</div>
+      <h2>${RUN_TYPES[d.type]}</h2>
+    </div>
+    <div class="ex-card">
+      <div class="sub-label">Segments · ${done}/${d.segs.length} done</div>
+      <div class="wu-sets">${segBtns}</div>
+      <div class="sub-label">The plan</div>
+      ${details}
+      <div class="sub-label">Result (optional)</div>
+      <div class="bw-form">
+        <input type="text" inputmode="decimal" placeholder="minutes" value="${d.min}" onchange="setRunDraftField('min', this.value)">
+        <input type="text" inputmode="decimal" placeholder="km" value="${d.km}" onchange="setRunDraftField('km', this.value)">
+      </div>
+      <div class="wu-none" style="margin-top: 8px;">Tick segments as you go. Numbers are optional; a run of 10 km or more with its time re-baselines the estimate to what you actually ran.</div>
+    </div>
+    <div class="sess-actions">
+      <button class="btn btn-volt" onclick="finishRun()">Save run</button>
+      <button class="btn btn-ghost" onclick="discardRun()">Discard run</button>
+    </div>`;
+}
+
 function runHTML() {
+  if (runDraft()) return runSessionHTML(runDraft());
   const cfg = runCfg();
   const st = runState();
   const header = appHeaderHTML("Running", `<span class="tag">10 km programme</span>`, "#/activities");
@@ -2699,21 +2799,11 @@ function runHTML() {
     ? `You're at goal pace — keep the cycles rolling to bank it.`
     : `${cyclesLeft} full cycles to goal at 30 s per cycle — roughly ${cyclesLeft} week${cyclesLeft === 1 ? "" : "s"} at 3 runs a week.`;
 
-  const today = `<div class="chart-card">
-    <div class="chart-head">
-      <h3>Next: ${RUN_TYPES[st.next]}</h3>
-      <span class="cur"><span class="best">session ${st.count + 1}</span></span>
-    </div>
-    <div class="wu-none">${runPrescription(st.next, st.W)}</div>
-    <div class="bw-form">
-      <input type="text" inputmode="decimal" id="run-min" placeholder="minutes (opt.)">
-      <input type="text" inputmode="decimal" id="run-km" placeholder="km (opt.)">
-    </div>
-    <div class="data-actions">
-      <button style="color: var(--volt);" onclick="logRun(true)">Completed</button>
-      <button style="color: var(--fail);" onclick="logRun(false)">Couldn't finish</button>
-    </div>
-    <div class="wu-none" style="margin-top: 10px;">Numbers are optional — Completed alone is a full entry. Log a run of 10 km or more with its time and the estimate re-baselines to what you actually ran.</div>
+  const today = `<div class="next-card" data-letter="${st.next}">
+    <div class="kicker">Next up · session ${st.count + 1}</div>
+    <h2>${RUN_TYPES[st.next]}</h2>
+    <div class="preview-row"><span class="ex">${runPrescription(st.next, st.W)}</span></div>
+    <button class="btn btn-volt" onclick="startRun()">Start ${RUN_TYPES[st.next].toLowerCase()}</button>
   </div>`;
 
   const chart = st.series.length > 1 ? `<div class="section-title"><span>Estimated 10 km time</span></div>
@@ -2730,9 +2820,13 @@ function runHTML() {
   const all = runData();
   const rows = all.slice(-10).reverse().map(s => {
     const idx = all.indexOf(s);
-    const pace = s.min && s.km ? ` · ${fmtPace(s.min / s.km)} /km` : "";
+    const bits = [];
+    if (s.segCount) bits.push(`${(s.segs || []).filter(Boolean).length}/${s.segCount} segments`);
+    if (s.min) bits.push(`${s.min} min`);
+    if (s.km) bits.push(`${s.km} km`);
+    if (s.min && s.km) bits.push(`${fmtPace(s.min / s.km)}/km`);
     return `<div class="hist-row">
-      <span>${RUN_TYPES[s.type]} <span class="${s.ok ? "ok" : "nok"}">${s.ok ? "✓" : "✗"}</span>${s.min ? ` <span class="reps">${s.min} min${s.km ? ` · ${s.km} km${pace}` : ""}</span>` : ""}</span>
+      <span>${RUN_TYPES[s.type]} <span class="${s.ok ? "ok" : "nok"}">${s.ok ? "✓" : "✗"}</span>${bits.length ? ` <span class="reps">${bits.join(" · ")}</span>` : ""}</span>
       <span class="reps">${fmtDate(s.date)} <button class="hist-del" onclick="deleteRun(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
     </div>`;
   }).join("");
