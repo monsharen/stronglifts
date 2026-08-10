@@ -584,6 +584,9 @@ const VIDEOS = {
 const MIN_WEIGHT = 20;        // empty bar
 const DELOAD_AFTER = 3;       // failed sessions at same weight
 const DELOAD_FACTOR = 0.9;
+const LAYOFF_GRACE_DAYS = 14; // strength holds ~2 weeks off; no cut before this
+const LAYOFF_PCT_PER_WEEK = 0.035; // detraining: ~3.5% off per week beyond the grace period
+const LAYOFF_FLOOR = 0.6;     // never suggest below 60% of the last weight
 
 const store = {
   load(key, fallback) {
@@ -616,6 +619,28 @@ function exerciseHistory(ex) {
   return out;
 }
 
+/* Date of the most recent session that included this exercise, or null */
+function lastExerciseDate(ex) {
+  let d = null;
+  for (const s of sessions())
+    for (const e of s.entries)
+      if (e.ex === ex) d = s.startedAt;
+  return d;
+}
+
+/* Detraining: whole days since the last time this exercise was trained */
+function daysOff(ex, now = Date.now()) {
+  const d = lastExerciseDate(ex);
+  return d === null ? 0 : Math.max(0, Math.floor((now - new Date(d)) / 86400000));
+}
+
+/* Fraction of the last weight to keep after a layoff (1 = no loss) */
+function layoffFactor(days) {
+  if (days <= LAYOFF_GRACE_DAYS) return 1;
+  const weeksOff = (days - LAYOFF_GRACE_DAYS) / 7;
+  return Math.max(LAYOFF_FLOOR, 1 - LAYOFF_PCT_PER_WEEK * weeksOff);
+}
+
 function roundToPlate(w) {
   return Math.max(MIN_WEIGHT, Math.round(w / 2.5) * 2.5);
 }
@@ -628,6 +653,15 @@ function recommend(ex) {
   if (!hist.length) return { weight: def.start, why: "start", fails: 0 };
 
   const last = hist[hist.length - 1];
+
+  // Detraining: after a long enough layoff, ease back in below the last weight.
+  // This overrides normal progression only when it actually lowers the weight.
+  const off = daysOff(ex);
+  if (off > LAYOFF_GRACE_DAYS) {
+    const eased = roundToPlate(last.weight * layoffFactor(off));
+    if (eased < last.weight) return { weight: eased, why: "layoff", fails: 0, daysOff: off };
+  }
+
   if (isSuccess(last)) return { weight: last.weight + def.inc, why: "up", fails: 0 };
 
   let fails = 0;
@@ -695,7 +729,7 @@ function newDraft() {
     startedAt: new Date().toISOString(),
     entries: WORKOUTS[type].map(ex => {
       const rec = recommend(ex);
-      return { ex, weight: rec.weight, why: rec.why, fails: rec.fails, setReps: Array(EXERCISES[ex].sets).fill(null) };
+      return { ex, weight: rec.weight, why: rec.why, fails: rec.fails, daysOff: rec.daysOff, setReps: Array(EXERCISES[ex].sets).fill(null) };
     }),
   };
 }
@@ -715,6 +749,7 @@ function whyLabel(rec) {
     case "up": return "+weight — last session completed";
     case "repeat": return `attempt ${fails + 1} of ${DELOAD_AFTER} at this weight — deload after ${DELOAD_AFTER} fails`;
     case "deload": return `deload 10% — failed ${DELOAD_AFTER}× at this weight`;
+    case "layoff": return `eased back — ${rec.daysOff} days off, muscle fades after ~2 weeks. Rebuild from here.`;
     default: return "starting weight";
   }
 }
@@ -889,8 +924,9 @@ function homeHTML() {
   const rows = WORKOUTS[type].map(ex => {
     const def = EXERCISES[ex];
     const rec = recommend(ex);
-    const cls = rec.why === "deload" ? "deload" : rec.why === "up" ? "up" : "";
-    const attempt = rec.why === "repeat" ? `<span class="scheme">try ${rec.fails + 1}/${DELOAD_AFTER}</span>` : "";
+    const cls = rec.why === "deload" || rec.why === "layoff" ? "deload" : rec.why === "up" ? "up" : "";
+    const attempt = rec.why === "repeat" ? `<span class="scheme">try ${rec.fails + 1}/${DELOAD_AFTER}</span>`
+      : rec.why === "layoff" ? `<span class="scheme">eased · ${rec.daysOff}d off</span>` : "";
     return `<div class="preview-row">
       <span class="ex">${def.name}<span class="scheme">${def.sets}×${def.reps}</span></span>
       <span class="kg ${cls}">${attempt}${fmtKg(rec.weight)}</span>
@@ -971,7 +1007,7 @@ function sessionHTML() {
       }
       return `<button class="set-btn ${cls}" onclick="tapSet(${i},${si})">${label}</button>`;
     }).join("");
-    const hintCls = e.why === "deload" ? "deload" : e.why === "up" ? "up" : "";
+    const hintCls = e.why === "deload" || e.why === "layoff" ? "deload" : e.why === "up" ? "up" : "";
     return `<div class="ex-card">
       <div class="ex-top">
         <h3>${def.name}</h3>
