@@ -15,10 +15,10 @@ My personal health app. Everything runs in a single HTML file in the browser. No
 ## What's inside
 
 - **Summary**: weekly activity rings (workouts, weigh-in days, win days), charts for weight lifted, weight logged, calories and waist, insights computed from my own data, a monthly recap, weekly medals as 3D coins and optional reminders.
-- **Activities**: each activity is its own app. StrongLifts is the full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift. Swimming logs time in the water and distance when available, with pace per 100 m. Every activity counts toward the green ring and weekly medals.
+- **Activities**: each activity is its own app. StrongLifts is the full 5x5 logger. Alternating A/B workouts, automatic progression (+2.5 kg on success, repeat on failure, 10% deload after three fails), warm-up plans, a per-side plate calculator and a rest timer. Stats include the competition total (squat + bench + deadlift), session tonnage with warm-ups as a dotted line and PR charts per lift. Running is an adaptive 10 km programme: sessions rotate Intervals, Tempo and Long run with paces derived from an estimated 10 km time that drops 30 s per completed cycle, deloads after three straight fails, and re-baselines whenever a measured 10 km run beats the estimate. Swimming logs time in the water and distance when available, with pace per 100 m. Every activity counts toward the green ring and weekly medals.
 - **Body**: morning weigh-ins with BMI, a goal weight with pace and estimated finish date, a ghost race against my earlier runs, and tape measurements (waist, chest, arm, thigh) behind a Weight/Measure switch.
 - **Meals**: no calorie counting, just meal slots. Tick breakfast, lunch, fika, dinner, drinks and snacks against a daily budget. A day under budget earns a star. Missed days are fine and count against nothing.
-- **Awards**: 32 achievements as rotatable 3D medals in different materials, with the date earned engraved on the back. Everything unlocks from logged data, nothing to claim.
+- **Awards**: 36 achievements as rotatable 3D medals in different materials, with the date earned engraved on the back. Everything unlocks from logged data, nothing to claim.
 
 ## How to use
 
