@@ -478,6 +478,52 @@
   .pr-card .pr-lifts { font-size: 14px; margin-top: 3px; color: var(--dim); }
   .medal-shelf { font-size: 15px; letter-spacing: .15em; }
 
+  /* ---------- premium progress card ---------- */
+  .prog-card {
+    background:
+      radial-gradient(120% 90% at 15% 0%, rgba(216, 178, 60, .10), transparent 55%),
+      linear-gradient(180deg, #201f22, #161519);
+    border-radius: var(--radius); padding: 18px 16px 14px; margin-bottom: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 14px 34px rgba(0, 0, 0, .4);
+  }
+  .prog-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+  .prog-head h3 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .prog-head .wk { color: var(--dim); font-size: 12px; }
+  .prog-hero { display: flex; align-items: center; gap: 18px; }
+  .prog-medal { flex: 0 0 auto; }
+  .prog-info { flex: 1; min-width: 0; }
+  .prog-tier { font-family: ui-rounded, "SF Pro Rounded", -apple-system, sans-serif; font-weight: 700; font-size: 21px; letter-spacing: -.01em; }
+  .prog-bar { height: 6px; background: rgba(0, 0, 0, .45); border-radius: 3px; overflow: hidden; margin: 9px 0 8px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5); }
+  .prog-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+  .prog-fill.gold { background: linear-gradient(90deg, #e7c34c, #fff3b8); }
+  .prog-fill.silver { background: linear-gradient(90deg, #a2aab6, #eef1f5); }
+  .prog-fill.bronze { background: linear-gradient(90deg, #c07a3c, #ffd9a8); }
+  .prog-note { color: var(--dim); font-size: 13px; }
+  .week-shelf { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+  .week-shelf .wk-lbl { color: var(--dim-2); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+  .mini {
+    flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 2px 4px rgba(0, 0, 0, .35);
+  }
+  .mini.gold { background: radial-gradient(circle at 34% 28%, #fff3b8, #e7c34c 55%, #b8901f); }
+  .mini.silver { background: radial-gradient(circle at 34% 28%, #ffffff, #cdd3db 55%, #8f97a3); }
+  .mini.bronze { background: radial-gradient(circle at 34% 28%, #ffd9a8, #d0863e 55%, #9a5a24); }
+  .mini.none { width: 8px; height: 8px; background: rgba(255, 255, 255, .12); box-shadow: none; }
+  .prog-awards {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); cursor: pointer;
+  }
+  .prog-awards .pa-left { display: flex; align-items: center; gap: 10px; }
+  .prog-awards .pa-icon {
+    width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+    background: linear-gradient(160deg, #f2c94c, #c8992a);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 3px 8px rgba(0, 0, 0, .35);
+  }
+  .prog-awards .pa-name { font-size: 15px; font-weight: 500; }
+  .prog-awards .pa-count { color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .prog-awards .pa-count .chev { color: var(--dim-2); margin-left: 6px; }
+
   /* ---------- 3D medals ---------- */
   .coin-scene { perspective: 700px; }
   .coin3d { position: relative; transform-style: preserve-3d; transform: rotateX(12deg); cursor: pointer; touch-action: none; }
@@ -2489,8 +2535,8 @@ function showWeekMedal() {
   const pts = weeklyPoints()[weekKeyOf(new Date())] || 0;
   const medal = medalFor(pts);
   showcase(medal ? MEDAL_TIER[medal] : "locked", "★",
-    medal ? `${medal === "🥇" ? "Gold" : medal === "🥈" ? "Silver" : "Bronze"} week` : "No medal yet",
-    `${pts} points this week — workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin}`,
+    medal ? `${TIER_NAME[medal]} week` : "No medal yet",
+    medal ? "Earned from your activities, win days and weigh-ins this week." : "Log activities, win days and weigh-ins to earn a medal this week.",
     `wk of ${fmtShort(parseDayKey(weekKeyOf(new Date())))}`);
 }
 
@@ -2509,42 +2555,56 @@ function checkNewAwards() {
   for (const n of fresh) kudos("🏆 New award!", `${n} — open Awards to inspect your new medal`);
 }
 
+const TIER_NAME = { "🥇": "Gold", "🥈": "Silver", "🥉": "Bronze" };
+const miniClass = pts => { const m = medalFor(pts); return m ? MEDAL_TIER[m] : "none"; };
+
 function progressCardHTML() {
   const weeks = weeklyPoints();
   const thisWeek = weeks[weekKeyOf(new Date())] || 0;
   const medal = medalFor(thisWeek);
-  const nextMedal = MEDALS.slice().reverse().find(m => thisWeek < m.pts);
-  const weekLine = medal
-    ? `${medal} week secured — ${thisWeek} pts${nextMedal ? ` · ${nextMedal.pts - thisWeek} to ${nextMedal.icon}` : " · max medal!"}`
-    : `${thisWeek} pts this week — ${nextMedal.pts - thisWeek} more for 🥉`;
+  const tier = medal ? MEDAL_TIER[medal] : "bronze"; // colour the bar toward what's next
 
-  // Medal shelf: the last 8 finished weeks, oldest first
+  // Progress within the current rung of the ladder, in plain terms (no numbers)
+  const ladder = [0, ...MEDALS.slice().reverse().map(m => m.pts)]; // [0,30,60,100]
+  let lo = 0, hi = ladder[ladder.length - 1], nextName = "Gold";
+  for (let i = 0; i < ladder.length - 1; i++) {
+    if (thisWeek >= ladder[i] && thisWeek < ladder[i + 1]) { lo = ladder[i]; hi = ladder[i + 1]; nextName = TIER_NAME[MEDALS.find(m => m.pts === ladder[i + 1]).icon]; break; }
+  }
+  const atMax = thisWeek >= ladder[ladder.length - 1];
+  const fillPct = atMax ? 100 : Math.round((thisWeek - lo) / (hi - lo) * 100);
+  const fillTier = atMax ? "gold" : (nextName || "").toLowerCase();
+
+  const tierLabel = medal ? `${TIER_NAME[medal]} week` : "This week";
+  const remaining = hi - thisWeek;
+  const note = atMax ? "A complete week — every ring earned."
+    : remaining <= MEDAL_PTS.workout ? `One more session away from ${nextName}.`
+    : medal ? `On the way to ${nextName}.`
+    : `Log activities, win days and weigh-ins to earn this week's medal.`;
+
+  // Recent-weeks shelf as mini medals, last 8 finished weeks (oldest first)
   const shelf = [];
   for (let i = 8; i >= 1; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - 7 * i);
-    shelf.push(medalFor(weeks[weekKeyOf(d)] || 0) || "·");
+    const d = new Date(); d.setDate(d.getDate() - 7 * i);
+    shelf.push(`<span class="mini ${miniClass(weeks[weekKeyOf(d)] || 0)}"></span>`);
   }
 
-  const wins = winCount();
+  const unlocked = ACHIEVEMENTS.filter(a => a.test(achCtx())).length;
   return `<div class="section-title"><span>Progress</span></div>
-  <div class="chart-card">
-    <div class="chart-head">
-      <h3>Medals</h3>
-      <span class="cur"><span class="best">this week</span></span>
-    </div>
-    <div class="coin-row">
-      ${coinHTML(medal ? MEDAL_TIER[medal] : "locked", "★", 76, { onclick: "showWeekMedal()", date: fmtShort(parseDayKey(weekKeyOf(new Date()))) })}
-      <div class="coin-info">
-        <div class="wu-none">${weekLine}</div>
-        <div class="wu-none" style="margin-top: 6px;">Past weeks: <span class="medal-shelf">${shelf.join(" ")}</span></div>
+  <div class="prog-card">
+    <div class="prog-head"><h3>This week</h3><span class="wk">wk of ${fmtShort(parseDayKey(weekKeyOf(new Date())))}</span></div>
+    <div class="prog-hero">
+      <div class="prog-medal">${coinHTML(medal ? MEDAL_TIER[medal] : "locked", "★", 84, { onclick: "showWeekMedal()", date: fmtShort(parseDayKey(weekKeyOf(new Date()))) })}</div>
+      <div class="prog-info">
+        <div class="prog-tier">${tierLabel}</div>
+        <div class="prog-bar"><div class="prog-fill ${fillTier}" style="width: ${fillPct}%"></div></div>
+        <div class="prog-note">${note}</div>
       </div>
     </div>
-    ${isBonusDay(todayKey()) ? `<div class="wu-none" style="margin-bottom: 6px;">🎰 Mystery ×2 day — a ⭐ logged today counts double toward this week's medal.</div>` : ""}
-    <div class="wu-none" style="margin-top: 6px;">Points: workout ${MEDAL_PTS.workout} · win day ${MEDAL_PTS.win} · weigh-in ${MEDAL_PTS.weighin} · ${wins} ⭐ win days total.</div>
-    <div class="tog-row" onclick="navigate('#/awards')" style="margin-top: 8px;">
-      <span class="t-name">🏆 Awards</span>
-      <span class="t-sub">${ACHIEVEMENTS.filter(a => a.test(achCtx())).length} / ${ACHIEVEMENTS.length} unlocked →</span>
+    ${isBonusDay(todayKey()) ? `<div class="prog-note" style="margin-top: 12px;">🎰 A win day logged today counts double toward this week's medal.</div>` : ""}
+    <div class="week-shelf"><span class="wk-lbl">Recent</span>${shelf.join("")}</div>
+    <div class="prog-awards" onclick="navigate('#/awards')">
+      <span class="pa-left"><span class="pa-icon">🏆</span><span class="pa-name">Awards</span></span>
+      <span class="pa-count">${unlocked} of ${ACHIEVEMENTS.length}<span class="chev">›</span></span>
     </div>
   </div>`;
 }
