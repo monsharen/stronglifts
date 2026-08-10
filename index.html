@@ -654,7 +654,7 @@ const TAB_ICONS = {
 };
 const TABS = [
   { route: "#/", label: "Summary", icon: TAB_ICONS.rings, match: h => h === "#/" || h === "#/awards" },
-  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" },
+  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" || h === "#/run" },
   { route: "#/body", label: "Body", icon: TAB_ICONS.scale, match: h => h.startsWith("#/body") },
   { route: "#/meals", label: "Meals", icon: TAB_ICONS.meals, match: h => h === "#/meals" },
 ];
@@ -668,7 +668,7 @@ function tabbarHTML() {
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/body", "#/body/measure", "#/meals", "#/awards"];
+const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/run", "#/body", "#/body/measure", "#/meals", "#/awards"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   if (h === "#/weight") return "#/body"; // Weight merged into Body
@@ -725,6 +725,7 @@ function render() {
     : route === "#/stronglifts" ? (draft ? sessionHTML() : homeHTML())
     : route === "#/stronglifts/stats" ? statsHTML()
     : route === "#/swim" ? swimHTML()
+    : route === "#/run" ? runHTML()
     : route === "#/body" ? weightHTML()
     : route === "#/body/measure" ? bodyHTML()
     : route === "#/meals" ? mealsHTML()
@@ -768,6 +769,12 @@ function activitiesHTML() {
       <div class="wu-none">${draft ? "Workout in progress — jump back in" : sl.length
         ? `Next: workout ${nextWorkoutType()} · ${sl.length} session${sl.length === 1 ? "" : "s"} · ${fmtVolume(Math.round(lifetimeVol()))} lifted`
         : "5×5 barbell program — start your first workout"}</div>
+    </div>
+    <div class="chart-card tap" onclick="navigate('#/run')">
+      <div class="chart-head"><h3>🏃 Running</h3><span class="cur"><span class="card-chev">›</span></span></div>
+      <div class="wu-none">${runData().length
+        ? `Est. 10 km ${fmtRunTime(runState().W)} · goal ${fmtRunTime(runCfg().goal)} · next: ${RUN_TYPES[runState().next]}`
+        : "Adaptive 10 km programme — from your time to your goal"}</div>
     </div>
     <div class="chart-card tap" onclick="navigate('#/swim')">
       <div class="chart-head"><h3>🏊 Swimming</h3><span class="cur"><span class="card-chev">›</span></span></div>
@@ -1497,7 +1504,8 @@ function weekRingStats() {
   const cfg = mealsCfg(), days = mealDays();
   return {
     workouts: sessions().filter(s => weekKeyOf(s.startedAt) === wk).length
-      + swims().filter(s => weekKeyOf(s.date) === wk).length,
+      + swims().filter(s => weekKeyOf(s.date) === wk).length
+      + runData().filter(s => weekKeyOf(s.date) === wk).length,
     weighins: new Set(bodyweights().filter(b => weekKeyOf(b.date) === wk).map(b => dayKeyOf(b.date))).size,
     wins: Object.keys(days).filter(k => weekKeyOf(parseDayKey(k)) === wk && dayKcal(days[k], cfg) <= cfg.budget).length,
   };
@@ -1567,6 +1575,15 @@ function dashHTML() {
     ${mealPts.length > 1 ? chartSVG(mealPts, -1, w => w, null, "#ff9f0a") : ""}
   </div>` : "";
 
+  const rst = runState();
+  const running = rst.series.length ? `<div class="chart-card tap" onclick="navigate('#/run')">
+    <div class="chart-head">
+      <h3 style="color:#ff375f;">Running</h3>
+      <span class="cur">${fmtRunTime(rst.W)}<span class="best">est. 10 km · goal ${fmtRunTime(runCfg().goal)}</span><span class="card-chev">›</span></span>
+    </div>
+    ${rst.series.length > 1 ? chartSVG(rst.series, -1, w => fmtRunTime(w), rst.series.map(() => ({ weight: runCfg().goal })), "#ff375f") : ""}
+  </div>` : "";
+
   const swimAll = swims();
   const swimPts = swimAll.map(s => ({ weight: s.min, ok: true, date: s.date }));
   const swimKmTot = Math.round(swimAll.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
@@ -1587,8 +1604,8 @@ function dashHTML() {
     ${waistPts.length > 1 ? chartSVG(waistPts, -1, w => w, null, "#bf5af2") : ""}
   </div>` : "";
 
-  const analytics = (lifted || swimming || logged || calories || waist)
-    ? lifted + swimming + logged + calories + waist
+  const analytics = (lifted || running || swimming || logged || calories || waist)
+    ? lifted + running + swimming + logged + calories + waist
     : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log an activity, a weigh-in or a meal, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
@@ -1641,6 +1658,8 @@ async function exportData() {
     mealsCfg: store.load("sl.mealsCfg", null),
     meas: measurements(),
     swim: swims(),
+    run: runData(),
+    runCfg: store.load("sl.runCfg", null),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -1716,6 +1735,20 @@ async function importData() {
       store.save("sl.swim", sw);
     }
   }
+
+  if (Array.isArray(data.run)) {
+    const rn = runData();
+    const seenRn = new Set(rn.map(s => s.date));
+    let addedRn = 0;
+    for (const s of data.run) {
+      if (s && s.date && s.type && !seenRn.has(s.date)) { rn.push(s); addedRn++; }
+    }
+    if (addedRn) {
+      rn.sort((a, b) => new Date(a.date) - new Date(b.date));
+      store.save("sl.run", rn);
+    }
+  }
+  if (data.runCfg && !localStorage.getItem("sl.runCfg")) store.save("sl.runCfg", data.runCfg);
 
   if (Array.isArray(data.meas)) {
     const ms = measurements();
@@ -2304,6 +2337,7 @@ function weeklyPoints(cutoff = Infinity) {
   const add = (k, v) => { pts[k] = (pts[k] || 0) + v; };
   for (const s of sessions()) if (new Date(s.startedAt) <= cutoff) add(weekKeyOf(s.startedAt), MEDAL_PTS.workout);
   for (const s of swims()) if (new Date(s.date) <= cutoff) add(weekKeyOf(s.date), MEDAL_PTS.workout);
+  for (const s of runData()) if (new Date(s.date) <= cutoff) add(weekKeyOf(s.date), MEDAL_PTS.workout);
   for (const b of bodyweights()) if (new Date(b.date) <= cutoff) add(weekKeyOf(b.date), MEDAL_PTS.weighin);
   const cfg = mealsCfg(), days = mealDays();
   for (const k of Object.keys(days))
@@ -2473,11 +2507,14 @@ function achCtx(cutoff = Infinity) {
   }
   const golds = Object.values(weeklyPoints(cutoff)).filter(p => p >= 100).length;
   const sw = swims().filter(s => new Date(s.date) <= cutoff);
+  const rs = runState(cutoff);
   return {
     best, vol, sessions: all.length, wins,
     weighins: bodyweights().filter(b => new Date(b.date) <= cutoff).length,
     fikaWins, bounce, golds, bestWeekWins: Math.max(0, ...Object.values(weekWins)),
     swims: sw.length, swimKm: sw.reduce((s, e) => s + (e.m || 0), 0) / 1000,
+    runs: rs.series.length, runBestW: rs.minW,
+    run10k: runData().some(s => new Date(s.date) <= cutoff && s.km >= 9.9 && s.min),
   };
 }
 
@@ -2488,6 +2525,7 @@ function awardDate(i) {
   const times = [
     ...sessions().map(s => new Date(s.startedAt).getTime()),
     ...swims().map(s => new Date(s.date).getTime()),
+    ...runData().map(s => new Date(s.date).getTime()),
     ...bodyweights().map(b => new Date(b.date).getTime()),
     ...Object.keys(mealDays()).map(k => parseDayKey(k).getTime()),
   ].sort((x, y) => x - y);
@@ -2529,6 +2567,10 @@ const ACHIEVEMENTS = [
   { icon: "🏊", mat: "sapphire", name: "First swim", desc: "Log your first swim", test: c => c.swims >= 1 },
   { icon: "🐬", mat: "sapphire", name: "Dolphin", desc: "Log 25 swims", test: c => c.swims >= 25 },
   { icon: "🌊", mat: "sapphire", name: "Open water", desc: "Swim 10 km in total", test: c => c.swimKm >= 10 },
+  { icon: "🏃", mat: "bronze", name: "First run", desc: "Log your first programme run", test: c => c.runs >= 1 },
+  { icon: "🔟", mat: "iron", name: "The full mil", desc: "Log a measured 10 km run", test: c => !!c.run10k },
+  { icon: "⏱", mat: "silver", name: "Sub-55", desc: "Estimated 10 km under 55 min", test: c => c.runs >= 1 && c.runBestW <= 55 },
+  { icon: "🎯", mat: "gold", name: "Mission 50", desc: "Estimated 10 km at 50 min or better", test: c => c.runs >= 1 && c.runBestW <= 50 },
 ];
 
 function awardsHTML() {
@@ -2545,6 +2587,174 @@ function awardsHTML() {
   return `${appHeaderHTML("Awards", `<span class="tag">${n} / ${ACHIEVEMENTS.length}</span>`, true)}
     <div class="ach-grid">${cells}</div>
     <div class="wu-none" style="margin-top: 12px;">Awards unlock themselves from your logs — nothing to claim, nothing to lose. Tap a medal to inspect it.</div>`;
+}
+
+/* ================= running: adaptive 10 km programme =================
+   StrongLifts logic applied to running. The app keeps an estimated 10 km
+   time W (starting at the baseline); every target pace derives from it.
+   Completing a full Intervals→Tempo→Long cycle drops W by 30 s. Three
+   failed sessions in a row add a minute back. A logged run of ~10 km or
+   more re-baselines W to the measured time when it's better — real data
+   always wins over the model. */
+
+const RUN_ORDER = ["I", "T", "L"];
+const RUN_TYPES = { I: "Intervals", T: "Tempo", L: "Long run" };
+
+const runData = () => store.load("sl.run", []); // oldest first: { date, type, ok, min?, km? }
+const runCfg = () => ({ baseline: 60, goal: 50, ...store.load("sl.runCfg", {}) });
+
+const fmtRunTime = m => `${Math.floor(m)}:${String(Math.round((m % 1) * 60)).padStart(2, "0")}`;
+const fmtPace = p => fmtRunTime(p);
+
+function runState(cutoff = Infinity) {
+  const cfg = runCfg();
+  let W = cfg.baseline, fails = 0, minW = cfg.baseline;
+  const cycle = new Set();
+  const series = [];
+  const all = runData();
+  for (const s of all) {
+    if (new Date(s.date) > cutoff) break;
+    if (s.km && s.min && s.km >= 9.9) {
+      const measured = Math.round(s.min * (10 / s.km) * 10) / 10;
+      if (measured < W) W = measured;
+    }
+    if (s.ok) {
+      fails = 0;
+      cycle.add(s.type);
+      if (cycle.size === 3) { W = Math.round((W - 0.5) * 10) / 10; cycle.clear(); }
+    } else if (++fails >= 3) { W = Math.round((W + 1) * 10) / 10; fails = 0; }
+    minW = Math.min(minW, W);
+    series.push({ weight: W, ok: s.ok, date: s.date });
+  }
+  const last = all.length ? all[all.length - 1] : null;
+  const next = last ? RUN_ORDER[(RUN_ORDER.indexOf(last.type) + 1) % 3] : "I";
+  return { W, next, series, minW, count: all.length };
+}
+
+function runPrescription(type, W) {
+  const p = W / 10; // current estimated 10 km pace, min/km
+  if (type === "I") return `6 × 800 m at ${fmtPace(p * 0.9)} /km, with 90 s jog recovery between reps. Warm up and cool down 10 min easy.`;
+  if (type === "T") return `25 min steady at ${fmtPace(p)} /km — comfortably hard, you could say short sentences. 10 min easy either side.`;
+  return `60 min easy at around ${fmtPace(p * 1.25)} /km — fully conversational. Slower is fine; time on feet is the point.`;
+}
+
+function logRun(ok) {
+  const st = runState();
+  const cfg = runCfg();
+  const min = parseFloat(String(document.getElementById("run-min").value).replace(",", "."));
+  const km = parseFloat(String(document.getElementById("run-km").value).replace(",", "."));
+  const entry = { date: new Date().toISOString(), type: st.next, ok: !!ok };
+  if (!isNaN(min) && min > 0) entry.min = Math.round(min * 10) / 10;
+  if (!isNaN(km) && km > 0) entry.km = Math.round(km * 100) / 100;
+  const before = juiceSnapshot();
+  const all = runData();
+  all.push(entry);
+  store.save("sl.run", all);
+  armAudio();
+  chime("tick");
+  if (navigator.vibrate) navigator.vibrate(15);
+  const st2 = runState();
+  if (ok) kudos("Run done!", `${RUN_TYPES[entry.type]}${entry.min ? ` · ${entry.min} min` : ""}${entry.km ? ` · ${entry.km} km` : ""}`);
+  else kudos("Logged", `${RUN_TYPES[entry.type]} — rough days build the good ones`, true);
+  if (st2.W < st.W) {
+    const hitGoal = st.W > cfg.goal && st2.W <= cfg.goal;
+    celebrate(hitGoal);
+    kudos(hitGoal ? "🎯 Goal pace!" : "Faster!", `estimated 10 km now ${fmtRunTime(st2.W)}${hitGoal ? ` — under ${fmtRunTime(cfg.goal)}!` : ""}`);
+  }
+  juiceAfter(before);
+  render();
+}
+
+function deleteRun(idx) {
+  const all = runData();
+  if (!all[idx] || !confirm(`Remove the ${RUN_TYPES[all[idx].type]} from ${fmtDate(all[idx].date)}?`)) return;
+  all.splice(idx, 1);
+  store.save("sl.run", all);
+  render();
+}
+
+function saveRunCfg() {
+  const cfg = runCfg();
+  for (const [id, key] of [["run-cfg-baseline", "baseline"], ["run-cfg-goal", "goal"]]) {
+    const v = parseFloat(String(document.getElementById(id).value).replace(",", "."));
+    if (!isNaN(v) && v > 20 && v < 120) cfg[key] = Math.round(v * 10) / 10;
+  }
+  store.save("sl.runCfg", cfg);
+  render();
+}
+
+function runHTML() {
+  const cfg = runCfg();
+  const st = runState();
+  const header = appHeaderHTML("Running", `<span class="tag">10 km programme</span>`, "#/activities");
+
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${fmtRunTime(st.W)}</div><div class="lbl">Est. 10 km</div></div>
+    <div class="tile"><div class="num">${fmtRunTime(cfg.goal)}</div><div class="lbl">Goal</div></div>
+    <div class="tile"><div class="num">${st.count}</div><div class="lbl">Runs</div></div>
+  </div>`;
+
+  const cyclesLeft = Math.max(0, Math.ceil((st.W - cfg.goal) / 0.5));
+  const outlook = st.W <= cfg.goal
+    ? `You're at goal pace — keep the cycles rolling to bank it.`
+    : `${cyclesLeft} full cycles to goal at 30 s per cycle — roughly ${cyclesLeft} week${cyclesLeft === 1 ? "" : "s"} at 3 runs a week.`;
+
+  const today = `<div class="chart-card">
+    <div class="chart-head">
+      <h3>Next: ${RUN_TYPES[st.next]}</h3>
+      <span class="cur"><span class="best">session ${st.count + 1}</span></span>
+    </div>
+    <div class="wu-none">${runPrescription(st.next, st.W)}</div>
+    <div class="bw-form">
+      <input type="text" inputmode="decimal" id="run-min" placeholder="minutes (opt.)">
+      <input type="text" inputmode="decimal" id="run-km" placeholder="km (opt.)">
+    </div>
+    <div class="data-actions">
+      <button style="color: var(--volt);" onclick="logRun(true)">Completed</button>
+      <button style="color: var(--fail);" onclick="logRun(false)">Couldn't finish</button>
+    </div>
+    <div class="wu-none" style="margin-top: 10px;">Numbers are optional — Completed alone is a full entry. Log a run of 10 km or more with its time and the estimate re-baselines to what you actually ran.</div>
+  </div>`;
+
+  const chart = st.series.length > 1 ? `<div class="section-title"><span>Estimated 10 km time</span></div>
+    <div class="chart-card">
+      ${chartSVG(st.series, -1, w => fmtRunTime(w), st.series.map(() => ({ weight: cfg.goal })), "#ff375f")}
+      <div class="chart-dates">
+        <span>${fmtDate(st.series[0].date)}</span>
+        <span>┄ goal ${fmtRunTime(cfg.goal)}</span>
+        <span>${fmtDate(st.series[st.series.length - 1].date)}</span>
+      </div>
+      <div class="wu-none" style="margin-top: 8px;">${outlook}</div>
+    </div>` : "";
+
+  const all = runData();
+  const rows = all.slice(-10).reverse().map(s => {
+    const idx = all.indexOf(s);
+    const pace = s.min && s.km ? ` · ${fmtPace(s.min / s.km)} /km` : "";
+    return `<div class="hist-row">
+      <span>${RUN_TYPES[s.type]} <span class="${s.ok ? "ok" : "nok"}">${s.ok ? "✓" : "✗"}</span>${s.min ? ` <span class="reps">${s.min} min${s.km ? ` · ${s.km} km${pace}` : ""}</span>` : ""}</span>
+      <span class="reps">${fmtDate(s.date)} <button class="hist-del" onclick="deleteRun(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
+    </div>`;
+  }).join("");
+  const hist = rows ? `<div class="section-title"><span>Sessions</span><span>${all.length} total${all.length > 10 ? " · showing last 10" : ""}</span></div>
+    <div class="hist-card">${rows}</div>` : "";
+
+  const cfgCard = `<div class="section-title"><span>Programme</span></div>
+    <div class="chart-card">
+      <div class="wu-none">Sessions rotate Intervals → Tempo → Long. Completing all three drops the estimate 30 s and tightens every pace; three failed sessions in a row add a minute back. Paces always derive from the current estimate.</div>
+      <div class="cfg-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="cfg-item"><label>Baseline 10 km (min)</label><input inputmode="decimal" id="run-cfg-baseline" value="${cfg.baseline}"></div>
+        <div class="cfg-item"><label>Goal 10 km (min)</label><input inputmode="decimal" id="run-cfg-goal" value="${cfg.goal}"></div>
+      </div>
+      <div class="data-actions"><button onclick="saveRunCfg()">Save programme</button></div>
+    </div>`;
+
+  return `${header}
+    ${tiles}
+    ${today}
+    ${chart}
+    ${hist}
+    ${cfgCard}`;
 }
 
 /* ================= body measurements app ================= */
@@ -2695,6 +2905,7 @@ function monthRecap() {
 
   const monthSwims = swims().filter(s => inM(s.date));
   const swimKm = Math.round(monthSwims.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
+  const monthRuns = runData().filter(s => inM(s.date));
 
   const weeks = weeklyPoints();
   const medals = Object.keys(weeks).sort()
@@ -2705,7 +2916,8 @@ function monthRecap() {
     label: mStart.toLocaleDateString(undefined, { month: "long", year: "numeric" }),
     sessions: sess.length, vol: Math.round(vol), prs, wDelta, wins, medals,
     swims: monthSwims.length, swimKm,
-    has: !!(sess.length || inMonth.length || wins || monthSwims.length),
+    runs: monthRuns.length, runKm: Math.round(monthRuns.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10,
+    has: !!(sess.length || inMonth.length || wins || monthSwims.length || monthRuns.length),
   };
 }
 
@@ -2715,6 +2927,7 @@ function recapCardHTML() {
   const rows = [];
   if (r.sessions) rows.push(`${r.sessions} workout${r.sessions === 1 ? "" : "s"} · ${fmtVolume(r.vol)} lifted`);
   if (r.swims) rows.push(`${r.swims} swim${r.swims === 1 ? "" : "s"}${r.swimKm ? ` · ${r.swimKm} km` : ""}`);
+  if (r.runs) rows.push(`${r.runs} run${r.runs === 1 ? "" : "s"}${r.runKm ? ` · ${r.runKm} km` : ""}`);
   if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta} kg over the month`);
   if (r.wins) rows.push(`${r.wins} ⭐ win day${r.wins === 1 ? "" : "s"}`);
   if (r.prs.length) rows.push(`new PRs: ${r.prs.join(" · ")}`);
