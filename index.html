@@ -2179,7 +2179,7 @@ function raceSVG(cur, ghost) {
     <circle cx="${x(p.day).toFixed(1)}" cy="${y(p.loss).toFixed(1)}" r="3.2" fill="#30d158"/>
     <circle cx="${x(p.day).toFixed(1)}" cy="${y(p.loss).toFixed(1)}" r="1.4" fill="#fff"/>`; })() : "";
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img">
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img">
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#30d158" stop-opacity=".28"/>
       <stop offset="1" stop-color="#30d158" stop-opacity="0"/>
@@ -2195,6 +2195,23 @@ function raceSVG(cur, ghost) {
     ${cur.length ? line(cur, 'stroke="#30d158" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" style="filter: drop-shadow(0 0 5px rgba(48,209,88,.4));"') : ""}
     ${youEnd}
   </svg>`;
+
+  if (cur.length > 1) {
+    const cid = "scr" + chartSeq;
+    chartMeta[cid] = {
+      W, H, color: "#30d158",
+      pts: cur.map(p => {
+        const gl = ghostLossAt(ghost, p.day);
+        return {
+          x: +x(p.day).toFixed(2), y: +y(p.loss).toFixed(2),
+          label: `−${p.loss} kg`,
+          date: `day ${p.day}${gl !== null ? ` · ghost −${gl.toFixed(1)}` : ""}`,
+        };
+      }),
+    };
+    return `<div class="chart-scrub" data-cid="${cid}">${svg}<div class="scrub-cross"></div><div class="scrub-dot"></div><div class="scrub-tip"></div></div>`;
+  }
+  return svg;
 }
 
 function raceCardHTML() {
