@@ -89,6 +89,18 @@
   .chart-head .cur { font-weight: 600; font-size: 15px; text-align: right; margin-left: 12px; font-variant-numeric: tabular-nums; }
   .chart-head .cur .best { color: var(--dim); font-weight: 400; font-size: 12px; margin-left: 6px; }
   .chart-card svg { display: block; width: 100%; height: auto; }
+  .chart-scrub { position: relative; touch-action: pan-y; }
+  .chart-scrub svg { display: block; width: 100%; height: auto; }
+  .scrub-cross { position: absolute; top: 0; bottom: 14px; width: 1px; background: rgba(255, 255, 255, .28); display: none; pointer-events: none; }
+  .scrub-dot { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #1c1c1e; border: 2.5px solid #fff; transform: translate(-50%, -50%); display: none; pointer-events: none; box-shadow: 0 0 0 3px rgba(255, 255, 255, .12); }
+  .scrub-tip {
+    position: absolute; top: 0; transform: translateX(-50%);
+    background: rgba(40, 40, 43, .96); border-radius: 8px; padding: 4px 9px;
+    font-size: 11px; white-space: nowrap; display: none; pointer-events: none; z-index: 5;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .1);
+  }
+  .scrub-tip .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .scrub-tip .d { color: var(--dim); margin-left: 7px; }
   .chart-dates { display: flex; justify-content: space-between; color: var(--dim-2); font-size: 11px; margin-top: 6px; }
 
   .bw-form { display: flex; gap: 8px; margin-top: 12px; }
@@ -857,6 +869,7 @@ function whyLabel(rec) {
 }
 
 function render() {
+  chartMeta = {}; // rebuilt as charts render this pass
   app.innerHTML = (
     route === "#/activities" ? activitiesHTML()
     : route === "#/stronglifts" ? (draft ? sessionHTML() : homeHTML())
@@ -1466,7 +1479,55 @@ function fmtVolume(kg) {
    axis labels on the right, dots for discrete samples (red ring = failed,
    orange ring = drinks-affected), optional dotted auxiliary series. */
 let chartSeq = 0;
+let chartMeta = {}; // cid -> { W, H, color, pts:[{x,y,label,date}] }, rebuilt each render
 const CHART_FONT = `-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+
+/* ---------- drag-to-scrub: touch/drag a chart to read a point ---------- */
+let scrubWrap = null, scrubMoved = false, scrubStartX = 0, scrubGuardUntil = 0;
+
+function scrubTo(clientX) {
+  const wrap = scrubWrap, m = chartMeta[wrap.dataset.cid];
+  if (!m) return;
+  const rect = wrap.getBoundingClientRect();
+  const svgX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * m.W;
+  let best = 0, bd = Infinity;
+  m.pts.forEach((p, i) => { const d = Math.abs(p.x - svgX); if (d < bd) { bd = d; best = i; } });
+  const p = m.pts[best];
+  const xPct = p.x / m.W * 100, yPct = p.y / m.H * 100;
+  const cross = wrap.querySelector(".scrub-cross"), dot = wrap.querySelector(".scrub-dot"), tip = wrap.querySelector(".scrub-tip");
+  cross.style.left = xPct + "%"; cross.style.display = "block";
+  dot.style.left = xPct + "%"; dot.style.top = yPct + "%"; dot.style.borderColor = m.color; dot.style.display = "block";
+  tip.innerHTML = `<span class="v">${p.label}</span>${p.date ? `<span class="d">${p.date}</span>` : ""}`;
+  tip.style.left = Math.max(14, Math.min(86, xPct)) + "%"; tip.style.display = "block";
+}
+
+function scrubEnd() {
+  if (!scrubWrap) return;
+  scrubWrap.querySelectorAll(".scrub-cross, .scrub-dot, .scrub-tip").forEach(el => el.style.display = "none");
+  if (scrubMoved) scrubGuardUntil = Date.now() + 350; // swallow the click after a drag
+  scrubWrap = null;
+}
+
+function initScrub() {
+  app.addEventListener("pointerdown", e => {
+    const wrap = e.target.closest(".chart-scrub");
+    if (!wrap) return;
+    scrubWrap = wrap; scrubMoved = false; scrubStartX = e.clientX;
+    scrubTo(e.clientX);
+  });
+  app.addEventListener("pointermove", e => {
+    if (!scrubWrap) return;
+    if (Math.abs(e.clientX - scrubStartX) > 5) scrubMoved = true;
+    if (scrubMoved) e.preventDefault();
+    scrubTo(e.clientX);
+  });
+  window.addEventListener("pointerup", scrubEnd);
+  window.addEventListener("pointercancel", scrubEnd);
+  // A drag that scrubbed should not also fire the card's navigate click
+  app.addEventListener("click", e => {
+    if (Date.now() < scrubGuardUntil) { e.stopPropagation(); e.preventDefault(); scrubGuardUntil = 0; }
+  }, true);
+}
 
 function chartSVG(pts, prIdx = -1, fmtLabel = w => w, aux = null, color = "#30d158") {
   const W = 320, H = 110, P = { l: 8, r: 44, t: prIdx >= 0 ? 26 : 12, b: 8 };
@@ -1514,7 +1575,23 @@ function chartSVG(pts, prIdx = -1, fmtLabel = w => w, aux = null, color = "#30d1
        <text x="${x(prIdx)}" y="${y(pts[prIdx].weight) - 11}" text-anchor="middle" fill="${color}" font-size="9" font-weight="600" font-family="${CHART_FONT}">PR</text>`
     : "";
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${area}${auxLine}${line}${dots}${live}${pr}</svg>`;
+  // Register geometry so a drag can scrub to the nearest point (viewBox units)
+  const cid = "sc" + chartSeq;
+  if (pts.length > 1) {
+    chartMeta[cid] = {
+      W, H, color,
+      pts: pts.map((p, i) => ({
+        x: +x(i).toFixed(2), y: +y(p.weight).toFixed(2),
+        label: String(fmtLabel(p.weight)),
+        date: p.date ? fmtDate(p.date) : "",
+      })),
+    };
+  }
+
+  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img">${grid}${area}${auxLine}${line}${dots}${live}${pr}</svg>`;
+  return pts.length > 1
+    ? `<div class="chart-scrub" data-cid="${cid}">${svg}<div class="scrub-cross"></div><div class="scrub-dot"></div><div class="scrub-tip"></div></div>`
+    : svg;
 }
 
 /* Epley estimated 1RM from a 5-rep working weight */
@@ -3508,6 +3585,7 @@ function deleteSession(idx) {
 }
 
 render();
+initScrub();
 checkNewAwards();
 
 if ("serviceWorker" in navigator) {
