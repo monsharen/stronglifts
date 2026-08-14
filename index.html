@@ -571,7 +571,14 @@
   .prog-awards .pa-count .chev { color: var(--dim-2); margin-left: 6px; }
 
   /* ---------- 3D medals ---------- */
-  .coin-scene { perspective: 700px; }
+  .coin-scene { perspective: 700px; position: relative; }
+  .coin-scene::after {
+    /* soft elliptical ground shadow so the coin sits in space instead of floating */
+    content: ""; position: absolute; left: 9%; right: 9%; bottom: -14%; height: 13%;
+    border-radius: 50%; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, .5), rgba(0, 0, 0, 0) 70%);
+    filter: blur(3px);
+  }
   .coin3d { position: relative; transform-style: preserve-3d; transform: rotateX(12deg); cursor: pointer; touch-action: none; }
   .coin3d.spin { animation: coin-spin 7s linear infinite; }
   @keyframes coin-spin {
@@ -582,20 +589,50 @@
   .coin3d .cface {
     backface-visibility: hidden;
     display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(circle at 32% 28%, var(--m1), var(--m2) 36%, var(--m3) 68%, var(--m4) 100%);
-    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .16), inset 0 0 24px rgba(0, 0, 0, .28);
+    /* specular hot spot, radial minting flutes, then the metal body */
+    background:
+      radial-gradient(circle at 30% 24%, rgba(255, 255, 255, .4), rgba(255, 255, 255, 0) 26%),
+      repeating-conic-gradient(from 8deg, rgba(255, 255, 255, .05) 0deg 3deg, rgba(0, 0, 0, .05) 3deg 6deg),
+      radial-gradient(circle at 32% 28%, var(--m1), var(--m2) 36%, var(--m3) 68%, var(--m4) 100%);
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 255, 255, .14),
+      inset 0 3px 6px rgba(255, 255, 255, .26),
+      inset 0 -5px 12px rgba(0, 0, 0, .42),
+      inset 0 0 30px rgba(0, 0, 0, .24);
   }
   .coin3d .cface::before {
-    content: ""; position: absolute; inset: 9%; border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, .22);
-    box-shadow: inset 0 1px 6px rgba(0, 0, 0, .3);
+    /* raised rim with an engraved ring just inside it */
+    content: ""; position: absolute; inset: 7%; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, .26);
+    box-shadow:
+      0 0 0 2px rgba(0, 0, 0, .24),
+      inset 0 2px 6px rgba(0, 0, 0, .36),
+      inset 0 -1px 2px rgba(255, 255, 255, .14);
   }
+  .coin3d .cface::after {
+    /* studio sheen sweeping across the face */
+    content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+    background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, .32) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: coin-sheen 3.6s ease-in-out infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes coin-sheen {
+    0% { background-position: 130% 0; }
+    55%, 100% { background-position: -40% 0; }
+  }
+  .coin3d.locked .cface::after { display: none; }
   .coin3d .cface span {
     filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .45));
     transform: translateZ(1px);
   }
   .coin3d .cface.back span { color: var(--m4); font-weight: 800; letter-spacing: .02em; text-shadow: 0 1px 0 rgba(255, 255, 255, .35); filter: none; }
-  .coin3d .cedge { background: radial-gradient(circle, var(--m3) 55%, var(--m4) 100%); }
+  .coin3d .cedge {
+    /* milled edge: fine vertical reeding instead of a flat band */
+    background:
+      radial-gradient(circle, transparent 58%, rgba(0, 0, 0, .35) 100%),
+      repeating-linear-gradient(90deg, var(--m4) 0 2px, var(--m3) 2px 4px);
+  }
   .coin3d.gold { --m1: #fff3b8; --m2: #f2ca4c; --m3: #c8992a; --m4: #7a5c10; }
   .coin3d.silver { --m1: #ffffff; --m2: #d9dde3; --m3: #a2aab6; --m4: #565e6a; }
   .coin3d.bronze { --m1: #ffd9b0; --m2: #d99a5b; --m3: #a86a33; --m4: #5e3a17; }
@@ -620,6 +657,26 @@
   }
   .sc-inner { text-align: center; padding: 24px; }
   .sc-inner .coin-scene { margin: 0 auto; }
+  .sc-coin-wrap { position: relative; display: inline-block; }
+  .sc-glow {
+    position: absolute; inset: -46%; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, var(--glow, #f2c94c) 0%, transparent 62%);
+    filter: blur(18px);
+    animation: glow-pulse 3s ease-in-out infinite;
+  }
+  @keyframes glow-pulse {
+    0%, 100% { opacity: .24; transform: scale(.94); }
+    50% { opacity: .42; transform: scale(1.06); }
+  }
+  .sparkle {
+    position: absolute; color: #fff; pointer-events: none; opacity: 0;
+    text-shadow: 0 0 8px var(--glow, #fff);
+    animation: twinkle 2.6s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); }
+    50% { opacity: .95; transform: scale(1) rotate(40deg); }
+  }
   .sc-name { font-size: 22px; font-weight: 700; margin-top: 26px; letter-spacing: -.01em; }
   .sc-desc { color: var(--dim); font-size: 14px; margin-top: 4px; }
   .sc-hint { color: var(--dim-2); font-size: 11px; margin-top: 18px; }
@@ -2662,11 +2719,26 @@ function coinDragInit(el) {
   el.addEventListener("pointercancel", () => { start = null; });
 }
 
+const COIN_GLOW = {
+  gold: "#f2c94c", silver: "#cfd6df", bronze: "#d99a5b", sapphire: "#4d9fff",
+  emerald: "#4fd47f", amber: "#ffb43a", amethyst: "#bf5af2", obsidian: "#8a93a5",
+  iron: "#94a3b8", locked: "#3a3a3e",
+};
+
 function showcase(tier, glyph, name, desc, date) {
   const overlay = document.createElement("div");
   overlay.className = "showcase";
-  overlay.innerHTML = `<div class="sc-inner">
-    ${coinHTML(tier, glyph, 190, { id: "sc-coin", date })}
+  const sparks = tier === "locked" ? "" : `
+    <span class="sparkle" style="top:3%;left:4%;font-size:15px;animation-delay:0s;">✦</span>
+    <span class="sparkle" style="top:14%;right:-2%;font-size:11px;animation-delay:.9s;">✦</span>
+    <span class="sparkle" style="bottom:12%;left:-4%;font-size:12px;animation-delay:1.6s;">✦</span>
+    <span class="sparkle" style="bottom:0;right:6%;font-size:16px;animation-delay:2.2s;">✦</span>`;
+  overlay.innerHTML = `<div class="sc-inner" style="--glow:${COIN_GLOW[tier] || "#f2c94c"};">
+    <div class="sc-coin-wrap">
+      <div class="sc-glow"></div>
+      ${coinHTML(tier, glyph, 190, { id: "sc-coin", date })}
+      ${sparks}
+    </div>
     <div class="sc-name">${name}</div>
     <div class="sc-desc">${desc}</div>
     <div class="sc-hint">drag the medal to rotate · the date achieved is engraved on the back</div>
