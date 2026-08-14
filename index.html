@@ -854,6 +854,10 @@ function saveDraft() { store.save("sl.draft", draft); }
 
 const app = document.getElementById("app");
 const fmtKg = w => (w % 1 === 0 ? w : w.toFixed(1)) + " kg";
+/* Bodyweight always shows two decimals (89.65 kg); lift weights keep fmtKg */
+const bw2 = w => Number(w).toFixed(2);
+const fmtBw = w => bw2(w) + " kg";
+const fmtBwDelta = d => d === null ? "–" : (d > 0 ? "+" : d < 0 ? "-" : "±") + Math.abs(d).toFixed(2);
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const fmtClock = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 
@@ -1772,7 +1776,7 @@ function dashHTML() {
     : `<div class="tile tap" onclick="navigate('#/body')"><div class="num">–</div><div class="lbl">BMI · set height</div></div>`;
   const tiles = `<div class="tiles">
     <div class="tile"><div class="num">${fmtVolume(Math.round(vol))}</div><div class="lbl">Lifted</div></div>
-    <div class="tile"><div class="num">${bw.length ? bw[bw.length - 1].kg : "–"}</div><div class="lbl">Weight kg</div></div>
+    <div class="tile"><div class="num">${bw.length ? bw2(bw[bw.length - 1].kg) : "–"}</div><div class="lbl">Weight kg</div></div>
     ${bmiTile}
     <div class="tile"><div class="num">${all.length}</div><div class="lbl">Workouts</div></div>
   </div>`;
@@ -1791,9 +1795,9 @@ function dashHTML() {
   const logged = bwPts.length ? `<div class="chart-card tap" onclick="navigate('#/body')">
     <div class="chart-head">
       <h3 style="color:#0a84ff;">Weight Logged</h3>
-      <span class="cur">${fmtKg(bwPts[bwPts.length - 1].weight)}<span class="best">bodyweight</span><span class="card-chev">›</span></span>
+      <span class="cur">${fmtBw(bwPts[bwPts.length - 1].weight)}<span class="best">bodyweight</span><span class="card-chev">›</span></span>
     </div>
-    ${bwPts.length > 1 ? chartSVG(bwPts, -1, w => w, null, "#0a84ff") : ""}
+    ${bwPts.length > 1 ? chartSVG(bwPts, -1, w => bw2(w), null, "#0a84ff") : ""}
   </div>` : "";
 
   const mealPts = mealsSeries();
@@ -2023,7 +2027,7 @@ function saveGoal() {
   const inp = document.getElementById("goal-input");
   const g = parseFloat(String(inp.value).replace(",", "."));
   if (isNaN(g) || g <= 0) { inp.focus(); return; }
-  store.save("sl.goal", Math.round(g * 10) / 10);
+  store.save("sl.goal", Math.round(g * 100) / 100);
   render();
 }
 
@@ -2032,7 +2036,7 @@ function goalCardHTML(bw) {
   const goal = goalKg();
   if (!goal || !bw.length) return "";
   const cur = bw[bw.length - 1].kg;
-  const left = Math.round((cur - goal) * 10) / 10;
+  const left = Math.round((cur - goal) * 100) / 100;
   const d28 = bwChange(bw, 28);
   const pace = d28 === null ? null : Math.round(d28 / 4 * 100) / 100; // kg/week
   let eta;
@@ -2046,8 +2050,8 @@ function goalCardHTML(bw) {
   }
   return `<div class="chart-card">
     <div class="chart-head">
-      <h3 style="color:#0a84ff;">Goal ${fmtKg(goal)}</h3>
-      <span class="cur">${left > 0 ? left + " kg left" : "reached 🎉"}<span class="best">${pace !== null ? (pace > 0 ? "+" : "") + pace + " kg/week" : "pace –"}</span></span>
+      <h3 style="color:#0a84ff;">Goal ${fmtBw(goal)}</h3>
+      <span class="cur">${left > 0 ? bw2(left) + " kg left" : "reached 🎉"}<span class="best">${pace !== null ? (pace > 0 ? "+" : "") + pace.toFixed(2) + " kg/week" : "pace –"}</span></span>
     </div>
     <div class="wu-none">${eta}</div>
   </div>`;
@@ -2061,7 +2065,7 @@ function bwChange(bw, days) {
     if (new Date(b.date).getTime() <= cutoff) base = b;
     else break;
   }
-  return base ? Math.round((bw[bw.length - 1].kg - base.kg) * 10) / 10 : null;
+  return base ? Math.round((bw[bw.length - 1].kg - base.kg) * 100) / 100 : null;
 }
 
 const fmtDelta = d => d === null ? "–" : d === 0 ? "±0" : (d > 0 ? "+" : "") + d;
@@ -2204,8 +2208,8 @@ function raceSVG(cur, ghost) {
         const gl = ghostLossAt(ghost, p.day);
         return {
           x: +x(p.day).toFixed(2), y: +y(p.loss).toFixed(2),
-          label: `−${p.loss} kg`,
-          date: `day ${p.day}${gl !== null ? ` · ghost −${gl.toFixed(1)}` : ""}`,
+          label: `−${p.loss.toFixed(2)} kg`,
+          date: `day ${p.day}${gl !== null ? ` · ghost −${gl.toFixed(2)}` : ""}`,
         };
       }),
     };
@@ -2229,11 +2233,11 @@ function raceCardHTML() {
     const gl = ghostLossAt(gpts, you.day);
     if (gl === null) {
       delta = "Track cleared";
-      sub = `You've outlasted the ${key} run — it finished −${gLast.loss} kg on day ${gLast.day}.`;
+      sub = `You've outlasted the ${key} run — it finished −${gLast.loss.toFixed(2)} kg on day ${gLast.day}.`;
     } else {
-      const diff = Math.round((you.loss - gl) * 10) / 10;
-      if (diff >= 0) { cls = "ahead"; delta = `${diff} kg ahead`; sub = `of ${key}-you on day ${you.day} — keep it up.`; }
-      else { cls = "behind"; delta = `${-diff} kg behind`; sub = `${key}-you on day ${you.day} · it averaged ${(gLast.loss / (gLast.day / 7)).toFixed(1)} kg/week.`; }
+      const diff = Math.round((you.loss - gl) * 100) / 100;
+      if (diff >= 0) { cls = "ahead"; delta = `${diff.toFixed(2)} kg ahead`; sub = `of ${key}-you on day ${you.day} — keep it up.`; }
+      else { cls = "behind"; delta = `${(-diff).toFixed(2)} kg behind`; sub = `${key}-you on day ${you.day} · it averaged ${(gLast.loss / (gLast.day / 7)).toFixed(2)} kg/week.`; }
     }
   }
 
@@ -2282,7 +2286,7 @@ function weightHTML() {
         <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="height-input" placeholder="cm" value="${h ?? ""}">
         <button onclick="saveHeight()">Save height</button>
       </div>
-      <div class="wu-none" style="margin-top: 12px;">${goalKg() ? `Goal weight ${fmtKg(goalKg())} — drawn on the trend chart with pace and ETA above.` : "Set a goal weight to see kg left, your kg/week pace and a projected arrival date."}</div>
+      <div class="wu-none" style="margin-top: 12px;">${goalKg() ? `Goal weight ${fmtBw(goalKg())} — drawn on the trend chart with pace and ETA above.` : "Set a goal weight to see kg left, your kg/week pace and a projected arrival date."}</div>
       <div class="bw-form">
         <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="goal-input" placeholder="goal kg" value="${goalKg() ?? ""}">
         <button onclick="saveGoal()">Save goal</button>
@@ -2300,10 +2304,10 @@ function weightHTML() {
 
   const cur = bw[bw.length - 1].kg;
   const tiles = `<div class="tiles">
-    <div class="tile"><div class="num">${cur}</div><div class="lbl">Current kg</div></div>
+    <div class="tile"><div class="num">${bw2(cur)}</div><div class="lbl">Current kg</div></div>
     <div class="tile"><div class="num">${bmi() ?? "–"}</div><div class="lbl">BMI</div></div>
-    <div class="tile"><div class="num">${fmtDelta(bwChange(bw, 30))}</div><div class="lbl">30 days</div></div>
-    <div class="tile"><div class="num">${fmtDelta(Math.round((cur - bw[0].kg) * 10) / 10)}</div><div class="lbl">All time</div></div>
+    <div class="tile"><div class="num">${fmtBwDelta(bwChange(bw, 30))}</div><div class="lbl">30 days</div></div>
+    <div class="tile"><div class="num">${fmtBwDelta(Math.round((cur - bw[0].kg) * 100) / 100)}</div><div class="lbl">All time</div></div>
   </div>`;
 
   const pts = bwSeries();
@@ -2318,7 +2322,7 @@ function weightHTML() {
   if (recentDrinks) notes.push("Drinks were logged recently: the scale may swing up and down for a few days before it settles — trust the weekly trend, not today's number.");
   const chart = `<div class="chart-card">
       ${pts.length > 1
-        ? chartSVG(pts, -1, w => w, goalKg() ? pts.map(() => ({ weight: goalKg() })) : null, "#0a84ff") + `<div class="chart-dates">
+        ? chartSVG(pts, -1, w => bw2(w), goalKg() ? pts.map(() => ({ weight: goalKg() })) : null, "#0a84ff") + `<div class="chart-dates">
             <span>${fmtDate(pts[0].date)}</span>
             <span>${pts.length} entries</span>
             <span>${fmtDate(pts[pts.length - 1].date)}</span>
@@ -2331,7 +2335,7 @@ function weightHTML() {
   const rows = bw.slice(-14).reverse().map(b => {
     const idx = bw.indexOf(b);
     return `<div class="hist-row">
-      <span>${fmtKg(b.kg)}</span>
+      <span>${fmtBw(b.kg)}</span>
       <span class="reps">${fmtDate(b.date)} <button class="hist-del" onclick="deleteBwEntry(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
     </div>`;
   }).join("");
@@ -2353,7 +2357,7 @@ function logBodyweight() {
   const bw = bodyweights();
   const now = new Date().toISOString();
   const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  const entry = { date: now, kg: Math.round(w * 10) / 10 };
+  const entry = { date: now, kg: Math.round(w * 100) / 100 };
   const before = juiceSnapshot();
   const prevKg = bw.length ? bw[bw.length - 1].kg : null;
   const wasMin = bw.length ? Math.min(...bw.map(b => b.kg)) : Infinity;
@@ -2363,15 +2367,15 @@ function logBodyweight() {
   armAudio();
   chime("tick");
   if (navigator.vibrate) navigator.vibrate(15);
-  const delta = prevKg === null ? null : Math.round((entry.kg - prevKg) * 10) / 10;
-  const deltaTxt = delta === null ? "" : delta === 0 ? "same as last time" : `${delta > 0 ? "+" : ""}${delta} kg vs last`;
+  const delta = prevKg === null ? null : Math.round((entry.kg - prevKg) * 100) / 100;
+  const deltaTxt = delta === null ? "" : delta === 0 ? "same as last time" : `${delta > 0 ? "+" : ""}${delta.toFixed(2)} kg vs last`;
   const goal = goalKg();
   if (goal && entry.kg <= goal && (prevKg === null || prevKg > goal)) {
     celebrate(true);
-    kudos("🎉 Goal!", `${fmtKg(entry.kg)} — you made it to ${fmtKg(goal)}`);
+    kudos("🎉 Goal!", `${fmtBw(entry.kg)} — you made it to ${fmtBw(goal)}`);
   } else if (entry.kg < wasMin && bw.length >= 5) {
     celebrate(true);
-    kudos("New low!", `${fmtKg(entry.kg)} — lightest ever logged`);
+    kudos("New low!", `${fmtBw(entry.kg)} — lightest ever logged`);
   } else {
     kudos("Logged!", deltaTxt || "first entry on the books", true);
   }
@@ -3272,7 +3276,7 @@ function monthRecap() {
   const before = bw.filter(b => new Date(b.date) < mStart);
   const inMonth = bw.filter(b => inM(b.date));
   const startKg = inMonth.length ? (before.length ? before[before.length - 1].kg : inMonth[0].kg) : null;
-  const wDelta = startKg === null ? null : Math.round((inMonth[inMonth.length - 1].kg - startKg) * 10) / 10;
+  const wDelta = startKg === null ? null : Math.round((inMonth[inMonth.length - 1].kg - startKg) * 100) / 100;
 
   const cfg = mealsCfg(), days = mealDays();
   const wins = Object.keys(days).filter(k => {
@@ -3305,7 +3309,7 @@ function recapCardHTML() {
   if (r.sessions) rows.push(`${r.sessions} workout${r.sessions === 1 ? "" : "s"} · ${fmtVolume(r.vol)} lifted`);
   if (r.swims) rows.push(`${r.swims} swim${r.swims === 1 ? "" : "s"}${r.swimKm ? ` · ${r.swimKm} km` : ""}`);
   if (r.runs) rows.push(`${r.runs} run${r.runs === 1 ? "" : "s"}${r.runKm ? ` · ${r.runKm} km` : ""}`);
-  if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta} kg over the month`);
+  if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta.toFixed(2)} kg over the month`);
   if (r.wins) rows.push(`${r.wins} ⭐ win day${r.wins === 1 ? "" : "s"}`);
   if (r.prs.length) rows.push(`new PRs: ${r.prs.join(" · ")}`);
   return `<div class="section-title"><span>Last month</span></div>
@@ -3324,7 +3328,7 @@ async function copyRecap() {
   const lines = [
     `Health Log — ${r.label}`,
     `Workouts: ${r.sessions} (${fmtVolume(r.vol)} lifted)`,
-    r.wDelta !== null ? `Bodyweight: ${r.wDelta > 0 ? "+" : ""}${r.wDelta} kg` : null,
+    r.wDelta !== null ? `Bodyweight: ${r.wDelta > 0 ? "+" : ""}${r.wDelta.toFixed(2)} kg` : null,
     `Win days: ${r.wins}`,
     r.medals.length ? `Medals: ${r.medals.join(" ")}` : null,
     r.prs.length ? `New PRs: ${r.prs.join(", ")}` : null,
@@ -3339,7 +3343,7 @@ async function copyRecap() {
 
 /* ================= insights: what your own data says ================= */
 
-const fmtSigned = v => (v > 0 ? "+" : "") + v;
+const fmtSigned = v => (v > 0 ? "+" : "") + v.toFixed(2);
 
 /* Weekly weight change grouped by win-day count — does the regime show on the scale? */
 function insightWins() {
