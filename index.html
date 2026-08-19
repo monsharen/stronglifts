@@ -386,6 +386,27 @@
   .mix-row .mix-lbl { color: var(--dim-2); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; font-size: 10px; }
   .mix-row b { color: #fff; font-weight: 600; }
   .mix-row .done, .mix-row .done b { color: var(--volt); }
+
+  /* ---------- energy balance: hero number + in/out bars ---------- */
+  .bal-hero { font-size: 36px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bal-hero.good { color: var(--volt); }
+  .bal-hero .bal-unit { font-size: 15px; font-weight: 600; color: var(--dim); margin-left: 5px; letter-spacing: 0; }
+  .bal-hero.good .bal-unit { color: var(--volt); opacity: .7; }
+  .bal-cap { color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .bal-bars { margin-top: 16px; display: flex; flex-direction: column; gap: 9px; }
+  .bal-row { display: flex; align-items: center; gap: 10px; }
+  .bal-lbl { flex: 0 0 28px; color: var(--dim); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .bal-track { flex: 1; height: 12px; border-radius: 6px; background: var(--panel-2); overflow: hidden; display: flex; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .3); }
+  .bal-fill { height: 100%; }
+  .bal-fill.in { background: linear-gradient(90deg, #ffc662, #ff9f0a); border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
+  .bal-fill.basal { background: linear-gradient(180deg, #4c4c50, #3f3f43); }
+  .bal-fill.act { background: linear-gradient(90deg, #5ee27f, #30d158); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); }
+  .bal-val { flex: 0 0 auto; min-width: 38px; text-align: right; color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bal-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 11px; color: var(--dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .bal-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 5px; }
+  .bal-legend .li-in { background: linear-gradient(135deg, #ffc662, #ff9f0a); }
+  .bal-legend .li-basal { background: #4c4c50; }
+  .bal-legend .li-act { background: linear-gradient(135deg, #5ee27f, #30d158); }
   .rings-row { display: flex; align-items: center; gap: 22px; padding: 4px 2px; }
   .rings { width: 126px; flex: 0 0 126px; }
   .ring-stats { display: flex; flex-direction: column; gap: 9px; flex: 1; }
@@ -2040,15 +2061,31 @@ function balanceCardHTML() {
   const verdict = bal <= 0
     ? `Kept up, this pace trims ≈ ${wkKg} kg/week${goal ? ` on the way to ${fmtBw(goal)}` : ""}.`
     : `≈ ${wkKg} kg/week upward if it holds. A 40 min run (~${runK} kcal) or the office commute (~${cyK} kcal) tips it back.`;
+  const scale = Math.max(avgIn, avgOut, 1);
+  const w = v => Math.round(v / scale * 1000) / 10;
   return `<div class="section-title"><span>Energy balance</span></div>
     <div class="chart-card" id="balance-card">
-      <div class="chart-head">
-        <h3 style="color:#ffd60a;">Balance</h3>
-        <span class="cur">${bal <= 0 ? "−" : "+"}${Math.abs(bal)} kcal/day<span class="best">avg ${bal <= 0 ? "deficit" : "surplus"}</span></span>
+      <div class="bal-hero ${bal <= 0 ? "good" : ""}">${bal <= 0 ? "−" : "+"}${Math.abs(bal)}<span class="bal-unit">kcal</span></div>
+      <div class="bal-cap">avg ${bal <= 0 ? "deficit" : "surplus"} per day · ${logged.length} logged day${logged.length === 1 ? "" : "s"} this week</div>
+      <div class="bal-bars">
+        <div class="bal-row">
+          <span class="bal-lbl">In</span>
+          <div class="bal-track"><div class="bal-fill in" style="width: ${w(avgIn)}%;"></div></div>
+          <span class="bal-val">${avgIn}</span>
+        </div>
+        <div class="bal-row">
+          <span class="bal-lbl">Out</span>
+          <div class="bal-track"><div class="bal-fill basal" style="width: ${w(bmr)}%;"></div><div class="bal-fill act" style="width: ${w(avgAct)}%;"></div></div>
+          <span class="bal-val">${avgOut}</span>
+        </div>
       </div>
-      <div class="wu-none" style="margin-top: 2px;">In ~${avgIn} · out ~${avgOut} kcal (basal ${bmr} + activity ${avgAct}), averaged over ${logged.length} logged day${logged.length === 1 ? "" : "s"} this week.</div>
-      <div class="wu-none" style="margin-top: 6px;">${verdict}</div>
-      <div class="wu-none" style="margin-top: 6px; opacity: .65;">Meal slots in, MET values and basal burn out. Estimates — steer by the trend, not the digits.</div>
+      <div class="bal-legend">
+        <span><i class="li-in"></i>Meals</span>
+        <span><i class="li-basal"></i>Basal ${bmr}</span>
+        <span><i class="li-act"></i>Activity ${avgAct}</span>
+      </div>
+      <div class="wu-none" style="margin-top: 12px;">${verdict}</div>
+      <div class="wu-none" style="margin-top: 6px; opacity: .6;">Meal slots in, MET values and basal burn out — estimates, steer by the trend.</div>
     </div>`;
 }
 
