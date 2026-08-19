@@ -2143,10 +2143,13 @@ function dashHTML() {
   </div>` : "";
 
   const bwPts = bwSeries();
+  const bwAllTime = bwPts.length > 1 ? Math.round((bwPts[bwPts.length - 1].weight - bwPts[0].weight) * 100) / 100 : null;
+  const bwSince = bwAllTime === null ? "bodyweight"
+    : `${fmtBwDelta(bwAllTime)} kg since ${new Date(bwPts[0].date).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`;
   const logged = bwPts.length ? `<div class="chart-card tap" onclick="navigate('#/body')">
     <div class="chart-head">
       <h3 style="color:#0a84ff;">Weight Logged</h3>
-      <span class="cur">${fmtBw(bwPts[bwPts.length - 1].weight)}<span class="best">bodyweight</span><span class="card-chev">›</span></span>
+      <span class="cur">${fmtBw(bwPts[bwPts.length - 1].weight)}<span class="best">${bwSince}</span><span class="card-chev">›</span></span>
     </div>
     ${bwPts.length > 1 ? chartSVG(bwPts, -1, w => bw2(w), null, "#0a84ff") : ""}
   </div>` : "";
@@ -3641,6 +3644,7 @@ function bodyHTML() {
   const tiles = `<div class="tiles">
     <div class="tile"><div class="num">${pts.length ? pts[pts.length - 1].weight : "–"}</div><div class="lbl">${MEAS_FIELDS.find(f => f.key === pick).name} cm</div></div>
     <div class="tile"><div class="num">${fmtDelta(seriesChange(pts, 30))}</div><div class="lbl">30 days</div></div>
+    <div class="tile"><div class="num">${fmtDelta(pts.length > 1 ? Math.round((pts[pts.length - 1].weight - pts[0].weight) * 10) / 10 : null)}</div><div class="lbl">All time</div></div>
     <div class="tile"><div class="num">${ms.length}</div><div class="lbl">Entries</div></div>
   </div>`;
 
