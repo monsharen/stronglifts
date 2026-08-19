@@ -376,6 +376,14 @@
   .log-title .nok { color: var(--fail); font-weight: 600; }
   .log-sub { color: var(--dim); font-size: 12px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .log-date { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .mix-row {
+    display: flex; gap: 16px; align-items: baseline;
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line);
+    color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums;
+  }
+  .mix-row .mix-lbl { color: var(--dim-2); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; font-size: 10px; }
+  .mix-row b { color: #fff; font-weight: 600; }
+  .mix-row .done, .mix-row .done b { color: var(--volt); }
   .rings-row { display: flex; align-items: center; gap: 22px; padding: 4px 2px; }
   .rings { width: 126px; flex: 0 0 126px; }
   .ring-stats { display: flex; flex-direction: column; gap: 9px; flex: 1; }
@@ -883,7 +891,7 @@ const TAB_ICONS = {
 };
 const TABS = [
   { route: "#/", label: "Summary", icon: TAB_ICONS.rings, match: h => h === "#/" || h === "#/awards" },
-  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" || h === "#/run" },
+  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" || h === "#/run" || h === "#/cycle" },
   { route: "#/body", label: "Body", icon: TAB_ICONS.scale, match: h => h.startsWith("#/body") },
   { route: "#/meals", label: "Meals", icon: TAB_ICONS.meals, match: h => h === "#/meals" },
 ];
@@ -897,7 +905,7 @@ function tabbarHTML() {
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/run", "#/body", "#/body/measure", "#/meals", "#/awards"];
+const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/run", "#/cycle", "#/body", "#/body/measure", "#/meals", "#/awards"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   if (h === "#/weight") return "#/body"; // Weight merged into Body
@@ -961,6 +969,7 @@ function render() {
     : route === "#/stronglifts/stats" ? statsHTML()
     : route === "#/swim" ? swimHTML()
     : route === "#/run" ? runHTML()
+    : route === "#/cycle" ? cycleHTML()
     : route === "#/body" ? weightHTML()
     : route === "#/body/measure" ? bodyHTML()
     : route === "#/meals" ? mealsHTML()
@@ -998,12 +1007,14 @@ const ACT_GLYPH = {
   lift: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M8 12h8"/><rect x="3.5" y="7" width="3.2" height="10" rx="1.2"/><rect x="17.3" y="7" width="3.2" height="10" rx="1.2"/><path d="M1.6 12H3M21 12h1.4"/></svg>`,
   run: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="4.5" r="1.9"/><path d="M13.5 9l-3 2.5 2.5 2.5.8 5"/><path d="M13 14l-3.5 1.5L6.5 21"/><path d="M13 11l3.5 1 2.5-1.5"/><path d="M10.2 11.5L6 10.5 4 13"/></svg>`,
   swim: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="7" r="1.9"/><path d="M4 11.5l4.5-3 3.5 2.5-3 2.5"/><path d="M12 11l3-2 2.5 2"/><path d="M3 18.5c1.4 1.2 2.6 1.2 4 0s2.6-1.2 4 0 2.6 1.2 4 0 2.6-1.2 4 0"/></svg>`,
+  cycle: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17" r="3.3"/><circle cx="18.5" cy="17" r="3.3"/><path d="M5.5 17l3.5-6.5h6"/><path d="M12 17l3-6.5"/><path d="M15 10.5L13.5 7h2.5"/></svg>`,
 };
 
 const ACT_GRAD = {
   lift: "linear-gradient(160deg, #3fdf6c, #1fa04a)",
   run: "linear-gradient(160deg, #ff5f79, #d81e3f)",
   swim: "linear-gradient(160deg, #63d2ff, #0a84ff)",
+  cycle: "linear-gradient(160deg, #ffd60a, #e08a00)",
 };
 
 function activityRow(route, glyph, grad, title, sub, live) {
@@ -1021,8 +1032,11 @@ function activitiesHTML() {
   const sl = sessions();
   const sw = swims();
   const rn = runData();
+  const cy = cycles();
   const swMin = sw.reduce((s, e) => s + e.min, 0);
   const swKm = Math.round(sw.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
+  const cyMin = cy.reduce((s, e) => s + e.min, 0);
+  const cyKm = Math.round(cy.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10;
 
   const slSub = draft ? "Workout in progress — jump back in" : sl.length
     ? `Next: workout ${nextWorkoutType()} · ${sl.length} session${sl.length === 1 ? "" : "s"} · ${fmtVolume(Math.round(lifetimeVol()))} lifted`
@@ -1033,10 +1047,14 @@ function activitiesHTML() {
   const swimSub = sw.length
     ? `${sw.length} swim${sw.length === 1 ? "" : "s"} · ${Math.round(swMin / 6) / 10} h${swKm ? ` · ${swKm} km` : ""}`
     : "Time in the water, distance when you have it";
+  const cycleSub = cy.length
+    ? `${cy.length} ride${cy.length === 1 ? "" : "s"} · ${Math.round(cyMin / 6) / 10} h${cyKm ? ` · ${cyKm} km` : ""}`
+    : "Commutes and rides — the office commute logs in one tap";
 
-  return `${appHeaderHTML("Activities", `<span class="tag">${sl.length + sw.length + rn.length} sessions</span>`)}
+  return `${appHeaderHTML("Activities", `<span class="tag">${sl.length + sw.length + rn.length + cy.length} sessions</span>`)}
     ${activityRow("#/stronglifts", ACT_GLYPH.lift, ACT_GRAD.lift, "StrongLifts", slSub, !!draft)}
     ${activityRow("#/run", ACT_GLYPH.run, ACT_GRAD.run, "Running", runSub, !!runDraft())}
+    ${activityRow("#/cycle", ACT_GLYPH.cycle, ACT_GRAD.cycle, "Cycling", cycleSub, false)}
     ${activityRow("#/swim", ACT_GLYPH.swim, ACT_GRAD.swim, "Swimming", swimSub, false)}
     <div class="wu-none" style="margin-top: 14px; padding: 0 4px;">Every activity counts toward the green ring and weekly medal points.</div>
     ${activityLogHTML()}`;
@@ -1070,6 +1088,13 @@ function activityLogHTML() {
       date: e.date, kind: "swim", route: "#/swim",
       title: "Swim",
       sub: `${e.min} min${e.m ? ` · ${e.m} m · ${swimPace(e)} /100 m` : ""}`,
+    });
+  }
+  for (const c of cycles()) {
+    items.push({
+      date: c.date, kind: "cycle", route: "#/cycle",
+      title: c.commute ? "Commute ride" : "Ride",
+      sub: `${c.min} min${c.km ? ` · ${c.km} km` : ""}`,
     });
   }
   items.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1178,6 +1203,98 @@ function swimHTML() {
     ${tiles}
     ${chart}
     <div class="section-title"><span>Swims</span><span>${all.length} total${all.length > 10 ? " · showing last 10" : ""}</span></div>
+    <div class="hist-card">${rows}</div>`;
+}
+
+/* ================= cycling ================= */
+
+const cycles = () => store.load("sl.cycle", []); // oldest first: { date, min, km?, commute? }
+
+function saveCycleEntry(entry, label) {
+  const before = juiceSnapshot();
+  const all = cycles();
+  all.push(entry);
+  store.save("sl.cycle", all);
+  armAudio();
+  chime("tick");
+  if (navigator.vibrate) navigator.vibrate(15);
+  kudos(label, `${entry.min} min${entry.km ? ` · ${entry.km} km` : ""}`);
+  juiceAfter(before);
+  render();
+}
+
+/* Office days: one tap logs the ride in and the ride home */
+function logCommute() {
+  saveCycleEntry({ date: new Date().toISOString(), min: 26, commute: true }, "Commute logged!");
+}
+
+function logCycle() {
+  const minIn = document.getElementById("cycle-min");
+  const min = parseFloat(String(minIn.value).replace(",", "."));
+  if (isNaN(min) || min <= 0) { minIn.focus(); return; }
+  const km = parseFloat(String(document.getElementById("cycle-km").value).replace(",", "."));
+  const entry = { date: new Date().toISOString(), min: Math.round(min) };
+  if (!isNaN(km) && km > 0) entry.km = Math.round(km * 10) / 10;
+  saveCycleEntry(entry, "Ride logged!");
+}
+
+function deleteCycle(idx) {
+  const all = cycles();
+  if (!all[idx] || !confirm(`Remove the ride from ${fmtDate(all[idx].date)}?`)) return;
+  all.splice(idx, 1);
+  store.save("sl.cycle", all);
+  render();
+}
+
+function cycleHTML() {
+  const all = cycles();
+  const header = appHeaderHTML("Cycling", `<span class="tag">activity</span>`, "#/activities");
+  const form = `<div class="bw-form">
+      <input type="text" inputmode="numeric" id="cycle-min" placeholder="minutes">
+      <input type="text" inputmode="decimal" id="cycle-km" placeholder="km (opt.)">
+      <button onclick="logCycle()">Log ride</button>
+    </div>
+    <div class="data-actions"><button onclick="logCommute()">Office commute · 2 × 13 min</button></div>`;
+
+  if (!all.length) {
+    return `${header}
+      <div class="chart-card">
+        <div class="wu-none">Commutes and rides both count — toward the green ring, the weekly medal and the energy balance. On office days the commute button logs the ride in and home in one tap.</div>
+        ${form}
+      </div>`;
+  }
+
+  const totMin = all.reduce((s, e) => s + e.min, 0);
+  const totKm = Math.round(all.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10;
+  const commutes = all.filter(e => e.commute).length;
+  const tiles = `<div class="tiles">
+    <div class="tile"><div class="num">${all.length}</div><div class="lbl">Rides</div></div>
+    <div class="tile"><div class="num">${Math.round(totMin / 6) / 10}</div><div class="lbl">Hours</div></div>
+    <div class="tile"><div class="num">${commutes || (totKm || "–")}</div><div class="lbl">${commutes ? "Commutes" : "km total"}</div></div>
+  </div>`;
+
+  const pts = all.map(e => ({ weight: e.min, ok: true, date: e.date }));
+  const chart = `<div class="chart-card">
+      ${pts.length > 1
+        ? chartSVG(pts, -1, w => w + " min", null, "#ffd60a") + `<div class="chart-dates">
+            <span>${fmtDate(pts[0].date)}</span><span>${pts.length} ride${pts.length === 1 ? "" : "s"}</span><span>${fmtDate(pts[pts.length - 1].date)}</span>
+          </div>`
+        : `<div class="wu-none">Log a second ride to see the trend.</div>`}
+      ${form}
+    </div>`;
+
+  const rows = all.slice(-10).reverse().map(e => {
+    const idx = all.indexOf(e);
+    return `<div class="hist-row">
+      <span>${e.commute ? "Commute" : "Ride"} <span class="reps">· ${e.min} min${e.km ? ` · ${e.km} km` : ""}</span></span>
+      <span class="reps">${fmtDate(e.date)} <button class="hist-del" onclick="deleteCycle(${idx})" style="padding: 0 0 0 12px;">delete</button></span>
+    </div>`;
+  }).join("");
+
+  return `${header}
+    ${tiles}
+    ${chart}
+    <div class="section-title"><span>Rides</span><span>${all.length} total${all.length > 10 ? " · showing last 10" : ""}</span></div>
     <div class="hist-card">${rows}</div>`;
 }
 
@@ -1841,6 +1958,92 @@ function statsHTML() {
     ${main}`;
 }
 
+/* ================= energy balance =================
+   Calories in from meal slots, calories out from basal burn (Mifflin-St Jeor)
+   plus MET estimates per activity. Everything is rough, but consistently
+   rough — which is exactly what steering a trend needs. */
+
+const birthYear = () => store.load("sl.birth", null);
+const sexPick = () => store.load("sl.sex", null); // "m" | "f"
+
+function bmrKcal() {
+  const bw = bodyweights(), h = heightCm(), by = birthYear(), sx = sexPick();
+  if (!bw.length || !h || !by || !sx) return null;
+  const age = new Date().getFullYear() - by;
+  return Math.round(10 * bw[bw.length - 1].kg + 6.25 * h - 5 * age + (sx === "m" ? 5 : -161));
+}
+
+/* kcal = MET × 3.5 × kg ÷ 200 × minutes */
+const metKcal = (met, min, kg) => met * 3.5 * kg / 200 * min;
+
+/* Estimated kcal burned by one logged activity */
+function actBurn(kind, e, kg) {
+  if (kind === "lift") return metKcal(6, 45, kg); // a 5×5 session runs ~45 min
+  if (kind === "run") {
+    const met = e.min && e.km ? Math.max(7, e.km / (e.min / 60)) : 9.5; // METs ≈ speed in km/h
+    return metKcal(met, e.min || 40, kg);
+  }
+  if (kind === "swim") return metKcal(7, e.min, kg);
+  return metKcal(6.8, e.min, kg); // cycling
+}
+
+/* Every logged activity grouped by calendar day: { "YYYY-MM-DD": [{kind, e}] } */
+function activityByDay() {
+  const map = {};
+  const add = (iso, kind, e) => { const k = dayKeyOf(iso); (map[k] = map[k] || []).push({ kind, e }); };
+  for (const s of sessions()) add(s.startedAt, "lift", s);
+  for (const r of runData()) add(r.date, "run", r);
+  for (const s of swims()) add(s.date, "swim", s);
+  for (const c of cycles()) add(c.date, "cycle", c);
+  return map;
+}
+
+function balanceCardHTML() {
+  const bmr = bmrKcal();
+  if (bmr === null) {
+    // Meals and weigh-ins exist but the profile can't compute basal burn yet
+    if (!Object.keys(mealDays()).length || !bodyweights().length) return "";
+    return `<div class="section-title"><span>Energy balance</span></div>
+      <div class="chart-card tap" onclick="navigate('#/body')">
+        <div class="wu-none">Add height, birth year and sex to your Body profile and this becomes calories in vs out — meals against basal burn plus every workout, run, ride and swim. →</div>
+      </div>`;
+  }
+  const cfg = mealsCfg(), days = mealDays(), acts = activityByDay();
+  const kg = bodyweights()[bodyweights().length - 1].kg;
+  const logged = [];
+  for (let off = 6; off >= 0; off--) {
+    const d = new Date();
+    d.setDate(d.getDate() - off);
+    const k = dayKeyOf(d);
+    if (!days[k]) continue; // sporadic logging is fine — unlogged days just don't count
+    const intake = dayKcal(days[k], cfg);
+    const act = Math.round((acts[k] || []).reduce((s, a) => s + actBurn(a.kind, a.e, kg), 0));
+    logged.push({ intake, act });
+  }
+  if (!logged.length) return "";
+  const avgIn = Math.round(logged.reduce((s, r) => s + r.intake, 0) / logged.length);
+  const avgAct = Math.round(logged.reduce((s, r) => s + r.act, 0) / logged.length);
+  const avgOut = bmr + avgAct;
+  const bal = avgIn - avgOut; // negative = deficit
+  const wkKg = Math.round(Math.abs(bal) * 7 / 7700 * 100) / 100;
+  const goal = goalKg();
+  const runK = Math.round(metKcal(9.5, 40, kg));
+  const cyK = Math.round(metKcal(6.8, 26, kg));
+  const verdict = bal <= 0
+    ? `Kept up, this pace trims ≈ ${wkKg} kg/week${goal ? ` on the way to ${fmtBw(goal)}` : ""}.`
+    : `≈ ${wkKg} kg/week upward if it holds. A 40 min run (~${runK} kcal) or the office commute (~${cyK} kcal) tips it back.`;
+  return `<div class="section-title"><span>Energy balance</span></div>
+    <div class="chart-card" id="balance-card">
+      <div class="chart-head">
+        <h3 style="color:#ffd60a;">Balance</h3>
+        <span class="cur">${bal <= 0 ? "−" : "+"}${Math.abs(bal)} kcal/day<span class="best">avg ${bal <= 0 ? "deficit" : "surplus"}</span></span>
+      </div>
+      <div class="wu-none" style="margin-top: 2px;">In ~${avgIn} · out ~${avgOut} kcal (basal ${bmr} + activity ${avgAct}), averaged over ${logged.length} logged day${logged.length === 1 ? "" : "s"} this week.</div>
+      <div class="wu-none" style="margin-top: 6px;">${verdict}</div>
+      <div class="wu-none" style="margin-top: 6px; opacity: .65;">Meal slots in, MET values and basal burn out. Estimates — steer by the trend, not the digits.</div>
+    </div>`;
+}
+
 /* ================= dashboard ================= */
 
 /* Fitness-style weekly activity rings: workouts, weigh-in days, win days */
@@ -1868,14 +2071,32 @@ function weekRingStats() {
   return {
     workouts: sessions().filter(s => weekKeyOf(s.startedAt) === wk).length
       + swims().filter(s => weekKeyOf(s.date) === wk).length
-      + runData().filter(s => weekKeyOf(s.date) === wk).length,
+      + runData().filter(s => weekKeyOf(s.date) === wk).length
+      + cycles().filter(s => weekKeyOf(s.date) === wk).length,
     weighins: new Set(bodyweights().filter(b => weekKeyOf(b.date) === wk).map(b => dayKeyOf(b.date))).size,
     wins: Object.keys(days).filter(k => weekKeyOf(parseDayKey(k)) === wk && dayKcal(days[k], cfg) <= cfg.budget).length,
   };
 }
 
+/* Lose weight + get stronger = 2 strength + 2 cardio sessions a week.
+   Presence-only: the mix shows what's done, never what was missed. */
+const MIX_GOALS = { strength: 2, cardio: 2 };
+
+function weekMix() {
+  const wk = weekKeyOf(new Date());
+  return {
+    strength: sessions().filter(s => weekKeyOf(s.startedAt) === wk).length,
+    cardio: runData().filter(s => weekKeyOf(s.date) === wk).length
+      + swims().filter(s => weekKeyOf(s.date) === wk).length
+      + cycles().filter(s => weekKeyOf(s.date) === wk).length,
+  };
+}
+
 function ringsCardHTML() {
   const r = weekRingStats();
+  const mix = weekMix();
+  const part = (label, val, goal) =>
+    `<span class="${val >= goal ? "done" : ""}">${label} <b>${val}</b>/${goal}</span>`;
   const stat = (label, val, goal, color) =>
     `<div class="ring-stat"><span class="r-lbl">${label}</span><span class="r-val" style="color:${color};">${val}<span class="r-goal">/${goal}</span></span></div>`;
   return `<div class="chart-card" id="rings-card">
@@ -1887,6 +2108,7 @@ function ringsCardHTML() {
         ${stat("Win days", r.wins, RING_GOALS.wins, "#ff9f0a")}
       </div>
     </div>
+    <div class="mix-row"><span class="mix-lbl">Weekly mix</span>${part("Strength", mix.strength, MIX_GOALS.strength)}${part("Cardio", mix.cardio, MIX_GOALS.cardio)}</div>
   </div>`;
 }
 
@@ -1958,6 +2180,17 @@ function dashHTML() {
     ${swimPts.length > 1 ? chartSVG(swimPts, -1, w => w + " min", null, "#64d2ff") : ""}
   </div>` : "";
 
+  const cyAll = cycles();
+  const cyPts = cyAll.map(c => ({ weight: c.min, ok: true, date: c.date }));
+  const cyKmTot = Math.round(cyAll.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10;
+  const cycling = cyPts.length ? `<div class="chart-card tap" onclick="navigate('#/cycle')">
+    <div class="chart-head">
+      <h3 style="color:#ffd60a;">Cycling</h3>
+      <span class="cur">${cyPts[cyPts.length - 1].weight} min<span class="best">${cyKmTot ? cyKmTot + " km total" : cyAll.length + " ride" + (cyAll.length === 1 ? "" : "s")}</span><span class="card-chev">›</span></span>
+    </div>
+    ${cyPts.length > 1 ? chartSVG(cyPts, -1, w => w + " min", null, "#ffd60a") : ""}
+  </div>` : "";
+
   const waistPts = measSeries("waist");
   const waist = waistPts.length ? `<div class="chart-card tap" onclick="navigate('#/body/measure')">
     <div class="chart-head">
@@ -1967,8 +2200,8 @@ function dashHTML() {
     ${waistPts.length > 1 ? chartSVG(waistPts, -1, w => w, null, "#bf5af2") : ""}
   </div>` : "";
 
-  const analytics = (lifted || running || swimming || logged || calories || waist)
-    ? lifted + running + swimming + logged + calories + waist
+  const analytics = (lifted || running || cycling || swimming || logged || calories || waist)
+    ? lifted + running + cycling + swimming + logged + calories + waist
     : `<div class="chart-card"><div class="wu-none">Nothing to show yet — log an activity, a weigh-in or a meal, and your combined analytics appear here.</div></div>`;
 
   const nudges = dueNudges();
@@ -1991,6 +2224,7 @@ function dashHTML() {
     ${tiles}
     ${nudgeBanner}
     ${progressCardHTML()}
+    ${balanceCardHTML()}
     <div class="section-title"><span>Across your apps</span></div>
     ${analytics}
     ${insightsCardHTML()}
@@ -2023,6 +2257,9 @@ async function exportData() {
     swim: swims(),
     run: runData(),
     runCfg: store.load("sl.runCfg", null),
+    cycle: cycles(),
+    birth: birthYear(),
+    sex: sexPick(),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -2113,6 +2350,21 @@ async function importData() {
   }
   if (data.runCfg && !localStorage.getItem("sl.runCfg")) store.save("sl.runCfg", data.runCfg);
 
+  if (Array.isArray(data.cycle)) {
+    const cy = cycles();
+    const seenCy = new Set(cy.map(c => c.date));
+    let addedCy = 0;
+    for (const c of data.cycle) {
+      if (c && c.date && typeof c.min === "number" && !seenCy.has(c.date)) { cy.push(c); addedCy++; }
+    }
+    if (addedCy) {
+      cy.sort((a, b) => new Date(a.date) - new Date(b.date));
+      store.save("sl.cycle", cy);
+    }
+  }
+  if (typeof data.birth === "number" && !birthYear()) store.save("sl.birth", data.birth);
+  if ((data.sex === "m" || data.sex === "f") && !sexPick()) store.save("sl.sex", data.sex);
+
   if (Array.isArray(data.meas)) {
     const ms = measurements();
     const seenMs = new Set(ms.map(m => m.date));
@@ -2147,6 +2399,19 @@ function saveHeight() {
   const h = parseFloat(String(inp.value).replace(",", "."));
   if (isNaN(h) || h < 50 || h > 250) { inp.focus(); return; }
   store.save("sl.height", Math.round(h));
+  render();
+}
+
+function saveBirth() {
+  const inp = document.getElementById("birth-input");
+  const y = parseInt(inp.value, 10);
+  if (isNaN(y) || y < 1900 || y > new Date().getFullYear() - 5) { inp.focus(); return; }
+  store.save("sl.birth", y);
+  render();
+}
+
+function saveSex(s) {
+  store.save("sl.sex", s);
   render();
 }
 
@@ -2419,6 +2684,15 @@ function weightHTML() {
       <div class="bw-form">
         <input type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" id="goal-input" placeholder="goal kg" value="${goalKg() ?? ""}">
         <button onclick="saveGoal()">Save goal</button>
+      </div>
+      <div class="wu-none" style="margin-top: 12px;">${bmrKcal() ? `Basal burn ~${bmrKcal()} kcal/day — feeds the energy balance on the summary.` : "Birth year and sex complete the energy balance: calories in from meals vs basal burn plus activities."}</div>
+      <div class="bw-form">
+        <input type="text" inputmode="numeric" id="birth-input" placeholder="birth year" value="${birthYear() ?? ""}">
+        <button onclick="saveBirth()">Save year</button>
+      </div>
+      <div class="data-actions">
+        <button class="${sexPick() === "m" ? "active" : ""}" onclick="saveSex('m')">Male</button>
+        <button class="${sexPick() === "f" ? "active" : ""}" onclick="saveSex('f')">Female</button>
       </div>
     </div>`;
 
@@ -2741,6 +3015,8 @@ function weeklyPoints(cutoff = Infinity) {
   for (const s of sessions()) if (new Date(s.startedAt) <= cutoff) add(weekKeyOf(s.startedAt), MEDAL_PTS.workout);
   for (const s of swims()) if (new Date(s.date) <= cutoff) add(weekKeyOf(s.date), MEDAL_PTS.workout);
   for (const s of runData()) if (new Date(s.date) <= cutoff) add(weekKeyOf(s.date), MEDAL_PTS.workout);
+  // Commute rides are real exercise but half a session — half the credit
+  for (const s of cycles()) if (new Date(s.date) <= cutoff) add(weekKeyOf(s.date), s.commute ? MEDAL_PTS.workout / 2 : MEDAL_PTS.workout);
   for (const b of bodyweights()) if (new Date(b.date) <= cutoff) add(weekKeyOf(b.date), MEDAL_PTS.weighin);
   const cfg = mealsCfg(), days = mealDays();
   for (const k of Object.keys(days))
@@ -3440,6 +3716,7 @@ function monthRecap() {
   const monthSwims = swims().filter(s => inM(s.date));
   const swimKm = Math.round(monthSwims.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
   const monthRuns = runData().filter(s => inM(s.date));
+  const monthRides = cycles().filter(s => inM(s.date));
 
   const weeks = weeklyPoints();
   const medals = Object.keys(weeks).sort()
@@ -3451,7 +3728,8 @@ function monthRecap() {
     sessions: sess.length, vol: Math.round(vol), prs, wDelta, wins, medals,
     swims: monthSwims.length, swimKm,
     runs: monthRuns.length, runKm: Math.round(monthRuns.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10,
-    has: !!(sess.length || inMonth.length || wins || monthSwims.length || monthRuns.length),
+    rides: monthRides.length, rideKm: Math.round(monthRides.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10,
+    has: !!(sess.length || inMonth.length || wins || monthSwims.length || monthRuns.length || monthRides.length),
   };
 }
 
@@ -3462,6 +3740,7 @@ function recapCardHTML() {
   if (r.sessions) rows.push(`${r.sessions} workout${r.sessions === 1 ? "" : "s"} · ${fmtVolume(r.vol)} lifted`);
   if (r.swims) rows.push(`${r.swims} swim${r.swims === 1 ? "" : "s"}${r.swimKm ? ` · ${r.swimKm} km` : ""}`);
   if (r.runs) rows.push(`${r.runs} run${r.runs === 1 ? "" : "s"}${r.runKm ? ` · ${r.runKm} km` : ""}`);
+  if (r.rides) rows.push(`${r.rides} ride${r.rides === 1 ? "" : "s"}${r.rideKm ? ` · ${r.rideKm} km` : ""}`);
   if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta.toFixed(2)} kg over the month`);
   if (r.wins) rows.push(`${r.wins} ⭐ win day${r.wins === 1 ? "" : "s"}`);
   if (r.prs.length) rows.push(`new PRs: ${r.prs.join(" · ")}`);
@@ -3551,8 +3830,37 @@ function insightDrinks() {
     : `Drinks days barely move your scale — ${fmtSigned(avg)} kg on average over the following three days (${samples.length} samples).`;
 }
 
+/* Weekly weight change grouped by training volume — does moving show on the scale? */
+function insightActive() {
+  const bw = bodyweights();
+  if (bw.length < 4) return null;
+  const actByWeek = {};
+  const byDay = activityByDay();
+  for (const k of Object.keys(byDay)) {
+    const wk = weekKeyOf(parseDayKey(k));
+    actByWeek[wk] = (actByWeek[wk] || 0) + byDay[k].length;
+  }
+  const chg = {};
+  for (const wk of new Set(bw.map(b => weekKeyOf(b.date)))) {
+    const start = parseDayKey(wk).getTime(), end = start + 7 * 86400000;
+    let prev = null, last = null;
+    for (const b of bw) {
+      const t = new Date(b.date).getTime();
+      if (t < start) prev = b.kg;
+      else if (t < end) last = b.kg;
+    }
+    if (prev !== null && last !== null) chg[wk] = last - prev;
+  }
+  const active = [], quiet = [];
+  for (const wk of Object.keys(chg)) ((actByWeek[wk] || 0) >= 3 ? active : quiet).push(chg[wk]);
+  if (active.length < 2 || quiet.length < 2) return null;
+  const avg = a => Math.round(a.reduce((s, x) => s + x, 0) / a.length * 100) / 100;
+  const a = avg(active), q = avg(quiet);
+  return `Weeks with 3+ activities: ${fmtSigned(a)} kg on the scale · quieter weeks: ${fmtSigned(q)} kg${a < q ? " — training weeks win." : "."}`;
+}
+
 function insightsCardHTML() {
-  const items = [insightWins(), insightDrinks()].filter(Boolean);
+  const items = [insightWins(), insightActive(), insightDrinks()].filter(Boolean);
   if (!items.length) return "";
   const bulb = `<svg viewBox="0 0 24 24" fill="none" stroke="#161900" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg>`;
   return `<div class="section-title"><span>Insights</span></div>
@@ -3577,6 +3885,32 @@ function calDaysSince(iso) {
   return Math.round((b - a) / 86400000);
 }
 
+/* Most recent activity of any kind — a run counts as much as a workout */
+function lastActivityISO() {
+  const ds = [
+    ...sessions().map(s => s.startedAt),
+    ...runData().map(r => r.date),
+    ...swims().map(s => s.date),
+    ...cycles().map(c => c.date),
+  ];
+  return ds.length ? ds.reduce((a, b) => (new Date(a) > new Date(b) ? a : b)) : null;
+}
+
+/* What fits today: Tue/Thu are office days (cycle commute + gym window),
+   home days favour a run. Whatever the weekly mix still needs wins. */
+function suggestActivity() {
+  const dow = new Date().getDay();
+  const office = dow === 2 || dow === 4;
+  const mix = weekMix();
+  if (office && mix.strength < MIX_GOALS.strength)
+    return { sub: `office day — cycle in and take workout ${nextWorkoutType()} at the gym`, route: "#/stronglifts" };
+  if (office)
+    return { sub: "office day — strength is banked, the commute ride still counts", route: "#/cycle" };
+  if (mix.cardio < MIX_GOALS.cardio || mix.strength >= MIX_GOALS.strength)
+    return { sub: `home day — ${RUN_TYPES[runState().next]} is next in the running programme`, route: "#/run" };
+  return { sub: `workout ${nextWorkoutType()} would balance the week`, route: "#/stronglifts" };
+}
+
 /* What's gently overdue right now, per the user's reminder settings */
 function dueNudges() {
   const r = reminders();
@@ -3584,11 +3918,16 @@ function dueNudges() {
   if (r.workout) {
     if (draft) {
       out.push({ id: "workout", name: "Workout in progress", sub: "finish and save it", route: "#/stronglifts" });
+    } else if (runDraft()) {
+      out.push({ id: "workout", name: "Run in progress", sub: "finish and save it", route: "#/run" });
     } else {
-      const all = sessions();
-      if (all.length) {
-        const d = daysSince(all[all.length - 1].startedAt);
-        if (d >= 3) out.push({ id: "workout", name: `Workout ${nextWorkoutType()} is waiting`, sub: `last session ${d} days ago`, route: "#/stronglifts" });
+      const last = lastActivityISO();
+      if (last) {
+        const d = daysSince(last);
+        if (d >= 3) {
+          const s = suggestActivity();
+          out.push({ id: "workout", name: "Time to move", sub: `last activity ${d} days ago · ${s.sub}`, route: s.route });
+        }
       }
     }
   }
@@ -3658,7 +3997,7 @@ function remindersCardHTML() {
     : "Gentle by design: a nudge on this dashboard and an app-icon badge when something is due, plus at most one silent notification per reminder per day. No schedules, no nagging.";
   return `<div class="section-title"><span>Reminders</span></div>
   <div class="chart-card">
-    ${row("workout", "Workout reminder", "when it's been 3+ days since your last session")}
+    ${row("workout", "Activity reminder", "when it's been 3+ days since any activity — the nudge suggests what fits the day")}
     ${row("weighin", "Weigh-in reminder", "mornings only, after two missed days — weigh in before breakfast")}
     <div class="wu-none" style="margin-top: 8px;">${hint}</div>
   </div>`;
