@@ -570,6 +570,15 @@
   .prog-awards .pa-count { color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
   .prog-awards .pa-count .chev { color: var(--dim-2); margin-left: 6px; }
 
+  /* ---------- measurement guide ---------- */
+  .meas-how { color: var(--dim); font-size: 12px; line-height: 1.5; margin: 0 2px 12px; }
+  .meas-guide { margin-top: 14px; }
+  .mg-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px; line-height: 1.5; }
+  .mg-row:last-of-type { border-bottom: 0; }
+  .mg-name { flex: 0 0 46px; font-weight: 600; }
+  .mg-how { color: var(--dim); }
+  .mg-tip { color: var(--dim-2); font-size: 11px; line-height: 1.5; margin-top: 10px; }
+
   /* ---------- 3D medals ---------- */
   .coin-scene { perspective: 700px; position: relative; }
   .coin-scene::after {
@@ -3213,8 +3222,10 @@ function runHTML() {
 /* ================= body measurements app ================= */
 
 const MEAS_FIELDS = [
-  { key: "waist", name: "Waist" }, { key: "chest", name: "Chest" },
-  { key: "arm", name: "Arm" }, { key: "thigh", name: "Thigh" },
+  { key: "waist", name: "Waist", how: "Level with the navel, tape all the way round. Breathe out normally and relax, don't pull in." },
+  { key: "chest", name: "Chest", how: "At nipple height, tape level across the back. Arms down, after a normal exhale." },
+  { key: "arm", name: "Arm", how: "Thickest point of the upper arm with the biceps flexed. Same arm every time." },
+  { key: "thigh", name: "Thigh", how: "Thickest point of the upper thigh, standing with weight even on both feet." },
 ];
 const measurements = () => store.load("sl.meas", []); // oldest first, sparse fields
 const measPickKey = () => store.load("sl.measPick", "waist");
@@ -3274,10 +3285,16 @@ function bodyHTML() {
     </div>
     <div class="data-actions"><button onclick="logMeasurements()">Log measurements</button></div>`;
 
+  const guide = `<div class="meas-guide">
+      ${MEAS_FIELDS.map(f => `<div class="mg-row"><span class="mg-name">${f.name}</span><span class="mg-how">${f.how}</span></div>`).join("")}
+      <div class="mg-tip">Morning is best, before eating. Tape snug but not squeezing, straight on skin, same spots every time.</div>
+    </div>`;
+
   if (!ms.length) {
     return `${header}
       <div class="chart-card">
         <div class="wu-none">Tape-measure tracking — waist is the body-composition signal BMI can't give a lifter. Log any subset, weekly is plenty; logging again the same day updates that day's entry.</div>
+        ${guide}
         ${form}
       </div>`;
   }
@@ -3293,6 +3310,7 @@ function bodyHTML() {
 
   const chart = `<div class="chart-card">
       ${picker}
+      <div class="meas-how">${MEAS_FIELDS.find(f => f.key === pick).how}</div>
       ${pts.length > 1
         ? chartSVG(pts, -1, w => w, null, "#bf5af2") + `<div class="chart-dates">
             <span>${fmtDate(pts[0].date)}</span><span>${pts.length} entries</span><span>${fmtDate(pts[pts.length - 1].date)}</span>
