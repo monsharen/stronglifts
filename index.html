@@ -76,6 +76,8 @@
   }
   .tile .num { font-weight: 700; font-size: 21px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
   .tile .lbl { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .tile .num .unit { font-size: 12px; font-weight: 500; color: var(--dim); margin-left: 2px; }
+  .delta-good, .delta-good .unit { color: var(--volt); }
   .tile.tap { cursor: pointer; }
   .tile.tap:active { background: var(--panel-2); }
   .chart-card {
@@ -947,6 +949,12 @@ const fmtKg = w => (w % 1 === 0 ? w : w.toFixed(1)) + " kg";
 const bw2 = w => Number(w).toFixed(2);
 const fmtBw = w => bw2(w) + " kg";
 const fmtBwDelta = d => d === null ? "–" : (d > 0 ? "+" : d < 0 ? "-" : "±") + Math.abs(d).toFixed(2);
+
+/* Delta with its unit; losing is the goal, so a drop shows green (Stocks-style
+   semantic color, sign still carries the meaning). Gains stay neutral — the
+   app colors wins, it never paints red. */
+const deltaHTML = (d, unit, fmt = v => v.toFixed(2)) => d === null ? "–"
+  : `<span class="${d < 0 ? "delta-good" : ""}">${d > 0 ? "+" : d < 0 ? "-" : "±"}${fmt(Math.abs(d))}<span class="unit">${unit}</span></span>`;
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 const fmtClock = s => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 
@@ -2145,7 +2153,7 @@ function dashHTML() {
   const bwPts = bwSeries();
   const bwAllTime = bwPts.length > 1 ? Math.round((bwPts[bwPts.length - 1].weight - bwPts[0].weight) * 100) / 100 : null;
   const bwSince = bwAllTime === null ? "bodyweight"
-    : `${fmtBwDelta(bwAllTime)} kg since ${new Date(bwPts[0].date).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`;
+    : `<span class="${bwAllTime < 0 ? "delta-good" : ""}">${fmtBwDelta(bwAllTime)} kg</span> since ${new Date(bwPts[0].date).toLocaleDateString(undefined, { month: "short", year: "numeric" })}`;
   const logged = bwPts.length ? `<div class="chart-card tap" onclick="navigate('#/body')">
     <div class="chart-head">
       <h3 style="color:#0a84ff;">Weight Logged</h3>
@@ -2198,7 +2206,7 @@ function dashHTML() {
   const waist = waistPts.length ? `<div class="chart-card tap" onclick="navigate('#/body/measure')">
     <div class="chart-head">
       <h3 style="color:#bf5af2;">Waist</h3>
-      <span class="cur">${waistPts[waistPts.length - 1].weight} cm<span class="best">${fmtDelta(seriesChange(waistPts, 30))} in 30 days</span><span class="card-chev">›</span></span>
+      <span class="cur">${waistPts[waistPts.length - 1].weight} cm<span class="best">${deltaHTML(seriesChange(waistPts, 30), "cm", v => String(Math.round(v * 10) / 10))} in 30 days</span><span class="card-chev">›</span></span>
     </div>
     ${waistPts.length > 1 ? chartSVG(waistPts, -1, w => w, null, "#bf5af2") : ""}
   </div>` : "";
@@ -2712,8 +2720,8 @@ function weightHTML() {
   const tiles = `<div class="tiles">
     <div class="tile"><div class="num">${bw2(cur)}</div><div class="lbl">Current kg</div></div>
     <div class="tile"><div class="num">${bmi() ?? "–"}</div><div class="lbl">BMI</div></div>
-    <div class="tile"><div class="num">${fmtBwDelta(bwChange(bw, 30))}</div><div class="lbl">30 days</div></div>
-    <div class="tile"><div class="num">${fmtBwDelta(Math.round((cur - bw[0].kg) * 100) / 100)}</div><div class="lbl">All time</div></div>
+    <div class="tile"><div class="num">${deltaHTML(bwChange(bw, 30), "kg")}</div><div class="lbl">30 days</div></div>
+    <div class="tile"><div class="num">${deltaHTML(Math.round((cur - bw[0].kg) * 100) / 100, "kg")}</div><div class="lbl">All time</div></div>
   </div>`;
 
   const pts = bwSeries();
@@ -3643,8 +3651,8 @@ function bodyHTML() {
 
   const tiles = `<div class="tiles">
     <div class="tile"><div class="num">${pts.length ? pts[pts.length - 1].weight : "–"}</div><div class="lbl">${MEAS_FIELDS.find(f => f.key === pick).name} cm</div></div>
-    <div class="tile"><div class="num">${fmtDelta(seriesChange(pts, 30))}</div><div class="lbl">30 days</div></div>
-    <div class="tile"><div class="num">${fmtDelta(pts.length > 1 ? Math.round((pts[pts.length - 1].weight - pts[0].weight) * 10) / 10 : null)}</div><div class="lbl">All time</div></div>
+    <div class="tile"><div class="num">${deltaHTML(seriesChange(pts, 30), "cm", v => String(Math.round(v * 10) / 10))}</div><div class="lbl">30 days</div></div>
+    <div class="tile"><div class="num">${deltaHTML(pts.length > 1 ? Math.round((pts[pts.length - 1].weight - pts[0].weight) * 10) / 10 : null, "cm", v => String(Math.round(v * 10) / 10))}</div><div class="lbl">All time</div></div>
     <div class="tile"><div class="num">${ms.length}</div><div class="lbl">Entries</div></div>
   </div>`;
 
