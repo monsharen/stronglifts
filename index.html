@@ -1037,6 +1037,7 @@ const ACT_GLYPH = {
   run: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="4.5" r="1.9"/><path d="M13.5 9l-3 2.5 2.5 2.5.8 5"/><path d="M13 14l-3.5 1.5L6.5 21"/><path d="M13 11l3.5 1 2.5-1.5"/><path d="M10.2 11.5L6 10.5 4 13"/></svg>`,
   swim: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="7" r="1.9"/><path d="M4 11.5l4.5-3 3.5 2.5-3 2.5"/><path d="M12 11l3-2 2.5 2"/><path d="M3 18.5c1.4 1.2 2.6 1.2 4 0s2.6-1.2 4 0 2.6 1.2 4 0 2.6-1.2 4 0"/></svg>`,
   cycle: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17" r="3.3"/><circle cx="18.5" cy="17" r="3.3"/><path d="M5.5 17l3.5-6.5h6"/><path d="M12 17l3-6.5"/><path d="M15 10.5L13.5 7h2.5"/></svg>`,
+  sick: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a2 2 0 0 1 4 0v9.2a4.5 4.5 0 1 1-4 0z"/><path d="M12 10v7"/></svg>`,
 };
 
 const ACT_GRAD = {
@@ -1044,6 +1045,7 @@ const ACT_GRAD = {
   run: "linear-gradient(160deg, #ff5f79, #d81e3f)",
   swim: "linear-gradient(160deg, #63d2ff, #0a84ff)",
   cycle: "linear-gradient(160deg, #ffd60a, #e08a00)",
+  sick: "linear-gradient(160deg, #8e8e93, #55555a)",
 };
 
 function activityRow(route, glyph, grad, title, sub, live) {
@@ -1086,6 +1088,7 @@ function activitiesHTML() {
     ${activityRow("#/cycle", ACT_GLYPH.cycle, ACT_GRAD.cycle, "Cycling", cycleSub, false)}
     ${activityRow("#/swim", ACT_GLYPH.swim, ACT_GRAD.swim, "Swimming", swimSub, false)}
     <div class="wu-none" style="margin-top: 14px; padding: 0 4px;">Every activity counts toward the green ring and weekly medal points.</div>
+    ${sickCardHTML()}
     ${activityLogHTML()}`;
 }
 
@@ -1124,6 +1127,13 @@ function activityLogHTML() {
       date: c.date, kind: "cycle", route: "#/cycle",
       title: c.commute ? "Commute ride" : "Ride",
       sub: `${c.min} min${c.km ? ` · ${c.km} km` : ""}`,
+    });
+  }
+  for (const k of sickDays()) {
+    items.push({
+      date: parseDayKey(k).toISOString(), kind: "sick", route: "#/activities",
+      title: "Sick day",
+      sub: "rest, on the record",
     });
   }
   items.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1325,6 +1335,64 @@ function cycleHTML() {
     ${chart}
     <div class="section-title"><span>Rides</span><span>${all.length} total${all.length > 10 ? " · showing last 10" : ""}</span></div>
     <div class="hist-card">${rows}</div>`;
+}
+
+/* ================= illness =================
+   Sick days are single day marks; consecutive marks form an episode.
+   Everything else derives: nudges pause, the log keeps the record,
+   insights show what illness historically does to training and weight. */
+
+const sickDays = () => store.load("sl.sick", []); // sorted "YYYY-MM-DD"
+const isSickDay = k => sickDays().includes(k);
+
+function toggleSick(offDays = 0) {
+  const days = sickDays();
+  const k = dayKeyOf(new Date(Date.now() - offDays * 86400000));
+  const i = days.indexOf(k);
+  if (i >= 0) days.splice(i, 1);
+  else days.push(k);
+  days.sort();
+  store.save("sl.sick", days);
+  if (i < 0) {
+    armAudio();
+    chime("tick");
+    kudos("Rest up", "sick day marked — activity nudges stay quiet while you recover", true);
+  }
+  render();
+}
+
+/* True on a sick day and the first day after — no nagging mid-recovery */
+function sickRecently() {
+  const days = sickDays();
+  return days.length ? calDaysSince(days[days.length - 1]) <= 1 : false;
+}
+
+/* Consecutive sick days grouped into episodes: { start, end, days } */
+function sickEpisodes() {
+  const eps = [];
+  for (const k of sickDays()) {
+    const last = eps[eps.length - 1];
+    if (last && Math.round((parseDayKey(k) - parseDayKey(last.end)) / 86400000) === 1) {
+      last.end = k;
+      last.days++;
+    } else eps.push({ start: k, end: k, days: 1 });
+  }
+  return eps;
+}
+
+function sickCardHTML() {
+  const today = isSickDay(dayKeyOf(new Date()));
+  const yest = isSickDay(dayKeyOf(new Date(Date.now() - 86400000)));
+  return `<div class="section-title"><span>Health</span></div>
+    <div class="chart-card">
+      <div class="wu-none">${today
+        ? "Sick today is marked. Rest is the training — activity nudges stay quiet until a day after you're back."
+        : "Under the weather? Mark it. Sick days pause the activity nudges and build a history of what illness does to your training and weight."}</div>
+      <div class="data-actions">
+        <button class="${today ? "active" : ""}" onclick="toggleSick(0)">Sick today${today ? " ✓" : ""}</button>
+        <button class="${yest ? "active" : ""}" onclick="toggleSick(1)">Yesterday${yest ? " ✓" : ""}</button>
+      </div>
+    </div>`;
 }
 
 function homeHTML() {
@@ -2308,6 +2376,7 @@ async function exportData() {
     cycle: cycles(),
     birth: birthYear(),
     sex: sexPick(),
+    sick: sickDays(),
   });
   try {
     await navigator.clipboard.writeText(payload);
@@ -2412,6 +2481,15 @@ async function importData() {
   }
   if (typeof data.birth === "number" && !birthYear()) store.save("sl.birth", data.birth);
   if ((data.sex === "m" || data.sex === "f") && !sexPick()) store.save("sl.sex", data.sex);
+
+  if (Array.isArray(data.sick)) {
+    const s = new Set(sickDays());
+    let addedSick = 0;
+    for (const k of data.sick) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && !s.has(k)) { s.add(k); addedSick++; }
+    }
+    if (addedSick) store.save("sl.sick", [...s].sort());
+  }
 
   if (Array.isArray(data.meas)) {
     const ms = measurements();
@@ -3766,6 +3844,7 @@ function monthRecap() {
   const swimKm = Math.round(monthSwims.reduce((s, e) => s + (e.m || 0), 0) / 100) / 10;
   const monthRuns = runData().filter(s => inM(s.date));
   const monthRides = cycles().filter(s => inM(s.date));
+  const monthSick = sickDays().filter(k => { const d = parseDayKey(k); return d >= mStart && d < mEnd; }).length;
 
   const weeks = weeklyPoints();
   const medals = Object.keys(weeks).sort()
@@ -3778,6 +3857,7 @@ function monthRecap() {
     swims: monthSwims.length, swimKm,
     runs: monthRuns.length, runKm: Math.round(monthRuns.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10,
     rides: monthRides.length, rideKm: Math.round(monthRides.reduce((s, e) => s + (e.km || 0), 0) * 10) / 10,
+    sick: monthSick,
     has: !!(sess.length || inMonth.length || wins || monthSwims.length || monthRuns.length || monthRides.length),
   };
 }
@@ -3790,6 +3870,7 @@ function recapCardHTML() {
   if (r.swims) rows.push(`${r.swims} swim${r.swims === 1 ? "" : "s"}${r.swimKm ? ` · ${r.swimKm} km` : ""}`);
   if (r.runs) rows.push(`${r.runs} run${r.runs === 1 ? "" : "s"}${r.runKm ? ` · ${r.runKm} km` : ""}`);
   if (r.rides) rows.push(`${r.rides} ride${r.rides === 1 ? "" : "s"}${r.rideKm ? ` · ${r.rideKm} km` : ""}`);
+  if (r.sick) rows.push(`${r.sick} sick day${r.sick === 1 ? "" : "s"} — recovery counted, not judged`);
   if (r.wDelta !== null) rows.push(`bodyweight ${r.wDelta > 0 ? "+" : ""}${r.wDelta.toFixed(2)} kg over the month`);
   if (r.wins) rows.push(`${r.wins} ⭐ win day${r.wins === 1 ? "" : "s"}`);
   if (r.prs.length) rows.push(`new PRs: ${r.prs.join(" · ")}`);
@@ -3811,6 +3892,7 @@ async function copyRecap() {
     `Workouts: ${r.sessions} (${fmtVolume(r.vol)} lifted)`,
     r.wDelta !== null ? `Bodyweight: ${r.wDelta > 0 ? "+" : ""}${r.wDelta.toFixed(2)} kg` : null,
     `Win days: ${r.wins}`,
+    r.sick ? `Sick days: ${r.sick}` : null,
     r.medals.length ? `Medals: ${r.medals.join(" ")}` : null,
     r.prs.length ? `New PRs: ${r.prs.join(", ")}` : null,
   ].filter(Boolean);
@@ -3908,8 +3990,40 @@ function insightActive() {
   return `Weeks with 3+ activities: ${fmtSigned(a)} kg on the scale · quieter weeks: ${fmtSigned(q)} kg${a < q ? " — training weeks win." : "."}`;
 }
 
+/* What illness has historically cost: time out, return lag, scale drift */
+function insightSick() {
+  const eps = sickEpisodes().filter(e => calDaysSince(e.end) >= 1);
+  if (!eps.length) return null;
+  const actDays = Object.keys(activityByDay()).sort();
+  const bw = bodyweights();
+  const backGaps = [], drift = [];
+  for (const e of eps) {
+    const endT = parseDayKey(e.end).getTime();
+    const next = actDays.find(k => parseDayKey(k).getTime() > endT);
+    if (next) backGaps.push(Math.round((parseDayKey(next).getTime() - endT) / 86400000));
+    let before = null, after = null;
+    for (const b of bw) {
+      const t = new Date(b.date).getTime();
+      if (t < parseDayKey(e.start).getTime()) before = b.kg;
+      else if (after === null && t > endT && t <= endT + 7 * 86400000) after = b.kg;
+    }
+    if (before !== null && after !== null) drift.push(after - before);
+  }
+  const totalDays = eps.reduce((s, e) => s + e.days, 0);
+  const bits = [`${eps.length} illness${eps.length === 1 ? "" : "es"} on record (${totalDays} sick day${totalDays === 1 ? "" : "s"})`];
+  if (backGaps.length) {
+    const avg = Math.round(backGaps.reduce((s, x) => s + x, 0) / backGaps.length);
+    bits.push(`back training ~${avg} day${avg === 1 ? "" : "s"} after recovery`);
+  }
+  if (drift.length) {
+    const avg = Math.round(drift.reduce((s, x) => s + x, 0) / drift.length * 100) / 100;
+    bits.push(`scale ${fmtSigned(avg)} kg through an episode`);
+  }
+  return bits.join(" · ") + ".";
+}
+
 function insightsCardHTML() {
-  const items = [insightWins(), insightActive(), insightDrinks()].filter(Boolean);
+  const items = [insightWins(), insightActive(), insightSick(), insightDrinks()].filter(Boolean);
   if (!items.length) return "";
   const bulb = `<svg viewBox="0 0 24 24" fill="none" stroke="#161900" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg>`;
   return `<div class="section-title"><span>Insights</span></div>
@@ -3964,7 +4078,7 @@ function suggestActivity() {
 function dueNudges() {
   const r = reminders();
   const out = [];
-  if (r.workout) {
+  if (r.workout && !sickRecently()) {
     if (draft) {
       out.push({ id: "workout", name: "Workout in progress", sub: "finish and save it", route: "#/stronglifts" });
     } else if (runDraft()) {
