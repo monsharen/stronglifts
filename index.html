@@ -387,6 +387,24 @@
   .mix-row b { color: #fff; font-weight: 600; }
   .mix-row .done, .mix-row .done b { color: var(--volt); }
 
+  /* ---------- health card: calm state row, breathing while resting ---------- */
+  .health-row { display: flex; align-items: center; gap: 12px; }
+  .health-icon {
+    flex: 0 0 40px; width: 40px; height: 40px; border-radius: 11px;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(160deg, #8e8e93, #55555a);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 4px 10px rgba(0, 0, 0, .35);
+  }
+  .health-icon svg { width: 21px; height: 21px; }
+  .health-icon.resting { animation: breathe 3.2s ease-in-out infinite; }
+  @keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.07); }
+  }
+  .h-body { flex: 1; min-width: 0; }
+  .h-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .h-sub { color: var(--dim); font-size: 12.5px; margin-top: 1px; line-height: 1.45; }
+
   /* ---------- energy balance: hero number + in/out bars ---------- */
   .bal-hero { font-size: 36px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .bal-hero.good { color: var(--volt); }
@@ -1383,11 +1401,27 @@ function sickEpisodes() {
 function sickCardHTML() {
   const today = isSickDay(dayKeyOf(new Date()));
   const yest = isSickDay(dayKeyOf(new Date(Date.now() - 86400000)));
+  let epDay = 0;
+  if (today) {
+    let d = new Date();
+    while (isSickDay(dayKeyOf(d))) { epDay++; d = new Date(d.getTime() - 86400000); }
+  }
+  const eps = sickEpisodes();
+  const title = today ? "Resting today" : "Feeling off?";
+  const sub = today
+    ? `day ${epDay} of this episode — nudges stay quiet until a day after you're back`
+    : eps.length
+      ? `${eps.length} illness${eps.length === 1 ? "" : "es"} on the record — insights track how recovery goes`
+      : "mark sick days: nudges pause, the log remembers, insights learn what illness costs";
   return `<div class="section-title"><span>Health</span></div>
     <div class="chart-card">
-      <div class="wu-none">${today
-        ? "Sick today is marked. Rest is the training — activity nudges stay quiet until a day after you're back."
-        : "Under the weather? Mark it. Sick days pause the activity nudges and build a history of what illness does to your training and weight."}</div>
+      <div class="health-row">
+        <div class="health-icon ${today ? "resting" : ""}">${ACT_GLYPH.sick}</div>
+        <div class="h-body">
+          <div class="h-title">${title}</div>
+          <div class="h-sub">${sub}</div>
+        </div>
+      </div>
       <div class="data-actions">
         <button class="${today ? "active" : ""}" onclick="toggleSick(0)">Sick today${today ? " ✓" : ""}</button>
         <button class="${yest ? "active" : ""}" onclick="toggleSick(1)">Yesterday${yest ? " ✓" : ""}</button>
