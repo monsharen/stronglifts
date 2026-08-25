@@ -405,6 +405,35 @@
   .h-title { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
   .h-sub { color: var(--dim); font-size: 12.5px; margin-top: 1px; line-height: 1.45; }
 
+  /* ---------- health calendar ---------- */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-head .cal-title { font-weight: 600; font-size: 16px; letter-spacing: -.01em; }
+  .cal-head button {
+    width: 34px; height: 34px; border: 0; border-radius: 10px; cursor: pointer;
+    background: var(--panel-2); color: var(--chalk); font-size: 18px; line-height: 1;
+  }
+  .cal-head button:disabled { opacity: .3; cursor: default; }
+  .cal-dow {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px;
+    color: var(--dim-2); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; text-align: center;
+  }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-cell {
+    aspect-ratio: 1; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-variant-numeric: tabular-nums;
+    background: var(--panel-2); transition: transform .1s ease;
+  }
+  .cal-cell:active { transform: scale(.9); }
+  .cal-cell.blank { background: transparent; cursor: default; }
+  .cal-cell.future { opacity: .28; cursor: default; }
+  .cal-cell.today { box-shadow: inset 0 0 0 1.5px var(--volt); }
+  .cal-cell.sick {
+    background: linear-gradient(160deg, #8e8e93, #55555a);
+    font-weight: 700;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 2px 6px rgba(0, 0, 0, .3);
+  }
+
   /* ---------- energy balance: hero number + in/out bars ---------- */
   .bal-hero { font-size: 36px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
   .bal-hero.good { color: var(--volt); }
@@ -932,7 +961,7 @@ const TAB_ICONS = {
 };
 const TABS = [
   { route: "#/", label: "Summary", icon: TAB_ICONS.rings, match: h => h === "#/" || h === "#/awards" },
-  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" || h === "#/run" || h === "#/cycle" },
+  { route: "#/activities", label: "Activities", icon: TAB_ICONS.flame, match: h => h === "#/activities" || h.startsWith("#/stronglifts") || h === "#/swim" || h === "#/run" || h === "#/cycle" || h === "#/health" },
   { route: "#/body", label: "Body", icon: TAB_ICONS.scale, match: h => h.startsWith("#/body") },
   { route: "#/meals", label: "Meals", icon: TAB_ICONS.meals, match: h => h === "#/meals" },
 ];
@@ -946,7 +975,7 @@ function tabbarHTML() {
 
 let draft = store.load("sl.draft", null);
 
-const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/run", "#/cycle", "#/body", "#/body/measure", "#/meals", "#/awards"];
+const ROUTES = ["#/", "#/activities", "#/stronglifts", "#/stronglifts/stats", "#/swim", "#/run", "#/cycle", "#/health", "#/body", "#/body/measure", "#/meals", "#/awards"];
 function parseRoute(h) {
   if (h === "#stats") return "#/stronglifts/stats"; // pre-dashboard deep link
   if (h === "#/weight") return "#/body"; // Weight merged into Body
@@ -1017,6 +1046,7 @@ function render() {
     : route === "#/swim" ? swimHTML()
     : route === "#/run" ? runHTML()
     : route === "#/cycle" ? cycleHTML()
+    : route === "#/health" ? healthHTML()
     : route === "#/body" ? weightHTML()
     : route === "#/body/measure" ? bodyHTML()
     : route === "#/meals" ? mealsHTML()
@@ -1363,20 +1393,27 @@ function cycleHTML() {
 const sickDays = () => store.load("sl.sick", []); // sorted "YYYY-MM-DD"
 const isSickDay = k => sickDays().includes(k);
 
-function toggleSick(offDays = 0) {
+/* Toggle one calendar day; future days stay unmarkable */
+function toggleSickKey(k) {
+  if (parseDayKey(k) > new Date()) return;
   const days = sickDays();
-  const k = dayKeyOf(new Date(Date.now() - offDays * 86400000));
   const i = days.indexOf(k);
   if (i >= 0) days.splice(i, 1);
   else days.push(k);
   days.sort();
   store.save("sl.sick", days);
-  if (i < 0) {
+  render();
+}
+
+function toggleSick(offDays = 0) {
+  const k = dayKeyOf(new Date(Date.now() - offDays * 86400000));
+  const adding = !isSickDay(k);
+  toggleSickKey(k);
+  if (adding) {
     armAudio();
     chime("tick");
     kudos("Rest up", "sick day marked — activity nudges stay quiet while you recover", true);
   }
-  render();
 }
 
 /* True on a sick day and the first day after — no nagging mid-recovery */
@@ -1415,18 +1452,71 @@ function sickCardHTML() {
       : "mark sick days: nudges pause, the log remembers, insights learn what illness costs";
   return `<div class="section-title"><span>Health</span></div>
     <div class="chart-card">
-      <div class="health-row">
+      <div class="health-row" onclick="navigate('#/health')" style="cursor: pointer;">
         <div class="health-icon ${today ? "resting" : ""}">${ACT_GLYPH.sick}</div>
         <div class="h-body">
           <div class="h-title">${title}</div>
           <div class="h-sub">${sub}</div>
         </div>
+        <span class="act-chev">›</span>
       </div>
       <div class="data-actions">
         <button class="${today ? "active" : ""}" onclick="toggleSick(0)">Sick today${today ? " ✓" : ""}</button>
         <button class="${yest ? "active" : ""}" onclick="toggleSick(1)">Yesterday${yest ? " ✓" : ""}</button>
+        <button onclick="navigate('#/health')">Calendar</button>
       </div>
     </div>`;
+}
+
+/* ---------- health calendar: tap days to mark illness, month by month ---------- */
+
+let calMonth = null; // { y, m } month in view; null = current
+
+function healthMonthShift(d) {
+  const now = new Date();
+  const c = calMonth || { y: now.getFullYear(), m: now.getMonth() };
+  const dt = new Date(c.y, c.m + d, 1);
+  calMonth = { y: dt.getFullYear(), m: dt.getMonth() };
+  render();
+}
+
+function healthHTML() {
+  const now = new Date();
+  const c = calMonth || { y: now.getFullYear(), m: now.getMonth() };
+  const first = new Date(c.y, c.m, 1);
+  const daysIn = new Date(c.y, c.m + 1, 0).getDate();
+  const lead = (first.getDay() + 6) % 7; // weeks start Monday
+  const sickSet = new Set(sickDays());
+  const todayK = dayKeyOf(now);
+  const atCurrent = c.y === now.getFullYear() && c.m === now.getMonth();
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(`<div class="cal-cell blank"></div>`);
+  for (let d = 1; d <= daysIn; d++) {
+    const k = dayKeyOf(new Date(c.y, c.m, d));
+    const future = parseDayKey(k) > now;
+    cells.push(`<div class="cal-cell${sickSet.has(k) ? " sick" : ""}${k === todayK ? " today" : ""}${future ? " future" : ""}"${future ? "" : ` onclick="toggleSickKey('${k}')"`}>${d}</div>`);
+  }
+  const allEps = sickEpisodes();
+  const eps = allEps.slice().reverse().slice(0, 6);
+  const epRow = e => {
+    const s = parseDayKey(e.start);
+    const range = e.days === 1 ? fmtShort(s) : `${s.getDate()} ${s.toLocaleDateString(undefined, { month: "short" })} – ${fmtShort(parseDayKey(e.end))}`;
+    return `<div class="hist-row"><span>${e.days} day${e.days === 1 ? "" : "s"}</span><span class="reps">${range}</span></div>`;
+  };
+  const total = sickDays().length;
+  return `${appHeaderHTML("Health", `<span class="tag">${total} sick day${total === 1 ? "" : "s"}</span>`, "#/activities")}
+    <div class="chart-card">
+      <div class="cal-head">
+        <button onclick="healthMonthShift(-1)">‹</button>
+        <span class="cal-title">${first.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>
+        <button onclick="healthMonthShift(1)" ${atCurrent ? "disabled" : ""}>›</button>
+      </div>
+      <div class="cal-dow">${["M", "T", "W", "T", "F", "S", "S"].map(d => `<span>${d}</span>`).join("")}</div>
+      <div class="cal-grid">${cells.join("")}</div>
+      <div class="wu-none" style="margin-top: 12px;">Tap a day to mark it sick, tap again to clear. Marked days pause the activity nudges and feed the illness insights.</div>
+    </div>
+    ${eps.length ? `<div class="section-title"><span>Episodes</span><span>${allEps.length} total${allEps.length > 6 ? " · showing last 6" : ""}</span></div>
+    <div class="hist-card">${eps.map(epRow).join("")}</div>` : ""}`;
 }
 
 function homeHTML() {
