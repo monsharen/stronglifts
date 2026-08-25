@@ -2575,6 +2575,11 @@ function saveSex(s) {
   render();
 }
 
+/* Stocks-style chart ranges for the bodyweight card */
+const BW_RANGES = { "1M": 30, "3M": 91, "6M": 182, "1Y": 365, "All": Infinity };
+const bwRangeKey = () => store.load("sl.bwRange", "3M");
+function bwRangePick(k) { store.save("sl.bwRange", k); render(); }
+
 const goalKg = () => store.load("sl.goal", null);
 
 function saveGoal() {
@@ -2883,15 +2888,30 @@ function weightHTML() {
   const notes = [];
   if (pts.some(p => p.warn)) notes.push("Amber dots are weigh-ins within two days of a Drinks day in Meals — expect wobble there.");
   if (recentDrinks) notes.push("Drinks were logged recently: the scale may swing up and down for a few days before it settles — trust the weekly trend, not today's number.");
+  const rangeKey = bwRangeKey();
+  const spanDays = BW_RANGES[rangeKey];
+  const cut = Date.now() - spanDays * 86400000;
+  let rpts = spanDays === Infinity ? pts : pts.filter(p => new Date(p.date).getTime() >= cut);
+  if (rpts.length < 2) rpts = pts; // too little in the window: show the full story
+  const rDelta = rpts.length > 1 ? Math.round((rpts[rpts.length - 1].weight - rpts[0].weight) * 100) / 100 : null;
+  const loggedToday = new Date(bw[bw.length - 1].date).toDateString() === new Date().toDateString();
+  const rangePicker = pts.length > 1 ? `<div class="data-actions" style="margin-top: 0; margin-bottom: 10px;">${Object.keys(BW_RANGES).map(k =>
+    `<button class="${k === rangeKey ? "active" : ""}" onclick="bwRangePick('${k}')">${k}</button>`).join("")}</div>` : "";
   const chart = `<div class="chart-card">
-      ${pts.length > 1
-        ? chartSVG(pts, -1, w => bw2(w), goalKg() ? pts.map(() => ({ weight: goalKg() })) : null, "#0a84ff") + `<div class="chart-dates">
-            <span>${fmtDate(pts[0].date)}</span>
-            <span>${pts.length} entries</span>
-            <span>${fmtDate(pts[pts.length - 1].date)}</span>
+      <div class="chart-head">
+        <h3 style="color:#0a84ff;">Bodyweight</h3>
+        <span class="cur">${fmtBw(cur)}<span class="best">${rDelta !== null ? `${deltaHTML(rDelta, "kg")} · ${rangeKey === "All" ? "all time" : rangeKey}` : loggedToday ? "logged today" : "latest"}</span></span>
+      </div>
+      ${rangePicker}
+      ${rpts.length > 1
+        ? chartSVG(rpts, -1, w => bw2(w), goalKg() ? rpts.map(() => ({ weight: goalKg() })) : null, "#0a84ff") + `<div class="chart-dates">
+            <span>${fmtDate(rpts[0].date)}</span>
+            <span>${rpts.length} entries</span>
+            <span>${fmtDate(rpts[rpts.length - 1].date)}</span>
           </div>`
         : `<div class="wu-none">Log a second weigh-in to see your trend.</div>`}
       ${notes.length ? `<div class="wu-none" style="margin-top: 8px;">${notes.join(" ")}</div>` : ""}
+      ${loggedToday ? `<div class="wu-none" style="margin-top: 8px;">✓ Logged today — logging again updates today's entry.</div>` : ""}
       ${form}
     </div>`;
 
